@@ -39,9 +39,9 @@ def clean_orders(
     report["exact_duplicates_removed"] = initial_dups
     df_dedup = df_raw.drop_duplicates()
 
-    # Step 3: For each order_id, retain only the record with the latest order_ts
+    # Step 3: For each order_id, retain only the record with the latest order_ts (deterministic whole-row selection)
     rows_before_latest = len(df_dedup)
-    df_latest = df_dedup.sort_values("order_ts").groupby("order_id", as_index=False).last()
+    df_latest = df_dedup.sort_values("order_ts").drop_duplicates(subset="order_id", keep="last").reset_index(drop=True)
     report["superseded_records_removed"] = int(rows_before_latest - len(df_latest))
     report["distinct_order_ids"] = int(len(df_latest))
 

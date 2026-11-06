@@ -57,9 +57,12 @@ instamart-copilot/
 ```
 
 ### 1.2 Technology Stack & Dependencies
-- **Language**: Python 3.11+ (Python 3.12 compatible)
-- **Data Processing**: pandas (>=2.0.0), numpy (>=1.24.0)
-- **Machine Learning & Storage**: scikit-learn (>=1.3.0), joblib (>=1.3.0)
+- **Language**: Python 3.11+ (tested on Python 3.12.10)
+- **Pinned Dependencies (`requirements.txt`)**:
+  - `pandas==2.2.3`
+  - `numpy==2.2.5`
+  - `scikit-learn==1.6.1`
+  - `joblib==1.4.2`
 - **Database**: SQLite 3.25+ (bundled with standard Python, supporting full window functions and CTEs)
 - **All Monetary Figures**: Expressed strictly in Indian Rupees (INR).
 
@@ -181,7 +184,7 @@ Cleaning was executed in the strictly prescribed sequence:
 
 1. **Timestamp Conversion**: Converted `order_ts` to datetime format.
 2. **Exact Deduplication**: Removed **119** exact duplicate rows, reducing orders from 13,084 to 12,965 rows.
-3. **Latest Record Retention by Order ID**: Grouped by `order_id` and retained only the record with the latest timestamp (`.sort_values('order_ts').groupby('order_id', as_index=False).last()`). This removed **656** earlier pending records, eliminating all pending rows and retaining the final status. Row count reduced to exactly **12,309**.
+3. **Latest Record Retention by Order ID (Deterministic Whole-Row Selection)**: Sorted orders chronologically by `order_ts` and applied `.drop_duplicates(subset="order_id", keep="last")` to preserve the complete latest record for each order. This removed **656** earlier pending records, eliminating all pending rows and retaining the final status. Row count reduced to exactly **12,309**.
 4. **Order Amount Recovery**: Converted `order_amount` to numeric with error coercion. Recovered **112** missing/unparseable values in the deduplicated table using catalog pricing:
    $$\text{order\_amount} = \text{round}\left(\text{price\_inr} \times \text{quantity} \times \left(1 - \frac{\text{discount\_pct}}{100}\right), 2\right)$$
    Missing amounts remaining: **0**.
@@ -322,7 +325,7 @@ The dataset captures 11,110 completed grocery and retail quick-commerce deliveri
 ---
 
 ### 3.8 Automated Validation Status
-Executing `python scripts/validate_part_a.py` executes 36 automated assertions across file existence, schema validity, demographic distributions, order integrity, revenue consistency, SQL query results, and statistical distributions.
+Executing `python scripts/validate_part_a.py` executes **59 runtime checks** across file existence, schema validity, demographic distributions, order integrity, revenue consistency, SQL query results, and statistical distributions.
 
 ```
 ==================================================
