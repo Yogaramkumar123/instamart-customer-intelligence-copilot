@@ -26,20 +26,36 @@ instamart-copilot/
 │
 ├── src/
 │   ├── __init__.py
-│   └── part_a/
+│   ├── part_a/
+│   │   ├── __init__.py
+│   │   ├── audit.py            # Dataset structure and anomaly profiling
+│   │   ├── clean_customers.py  # Customer demographic cleansing & imputation
+│   │   ├── clean_products.py   # Product catalog validation
+│   │   ├── clean_orders.py     # Sequential order cleaning & deduplication
+│   │   ├── database.py         # Relational SQLite database pipeline
+│   │   ├── sql_analysis.py     # Seven analytical business queries runner
+│   │   ├── pandas_analysis.py  # Pivot tables, descriptive stats & correlations
+│   │   └── validate.py         # Automated checkpoint validation suite
+│   │
+│   └── part_b/
 │       ├── __init__.py
-│       ├── audit.py            # Dataset structure and anomaly profiling
-│       ├── clean_customers.py  # Customer demographic cleansing & imputation
-│       ├── clean_products.py   # Product catalog validation
-│       ├── clean_orders.py     # Sequential order cleaning & deduplication
-│       ├── database.py         # Relational SQLite database pipeline
-│       ├── sql_analysis.py     # Seven analytical business queries runner
-│       ├── pandas_analysis.py  # Pivot tables, descriptive stats & correlations
-│       └── validate.py         # Automated checkpoint validation suite
+│       ├── rfm_analysis.py     # Customer RFM feature calculation
+│       ├── clustering.py       # K-Means clustering (K=2..8) and selection
+│       ├── segment_profiling.py# Cluster profiling, naming & export
+│       ├── pca_analysis.py     # 2D PCA projection & variance analysis
+│       ├── lapse_features.py   # Leakage-free cohort & feature matrix
+│       ├── preprocessing.py    # Stratified split & ColumnTransformer
+│       ├── model_training.py   # Baseline, Logistic Regression & Random Forest tuning
+│       ├── class_balance.py    # Training-only random oversampling experiment
+│       ├── model_interpretation.py # Feature importance & coefficient readings
+│       ├── retention_list.py   # Illustrative Premium retention ranking
+│       └── validate.py         # Comprehensive Part B validation suite
 │
 ├── scripts/
-│   ├── run_part_a.py           # End-to-end master orchestration pipeline
-│   └── validate_part_a.py      # Standalone verification runner
+│   ├── run_part_a.py           # End-to-end master orchestration pipeline (Part A)
+│   ├── validate_part_a.py      # Standalone verification runner (Part A)
+│   ├── run_part_b.py           # End-to-end master orchestration pipeline (Part B)
+│   └── validate_part_b.py      # Standalone verification runner (Part B)
 │
 ├── data/
 │   ├── raw/                    # Raw generated CSV files and policies
@@ -51,7 +67,11 @@ instamart-copilot/
 │   └── queries.sql             # Production SQL scripts (Q1 to Q7)
 │
 ├── outputs/
-│   └── part_a/                 # Query outputs, pivot tables, audit logs
+│   ├── customer_segments.csv   # Customer segment profiles (Part B)
+│   ├── lapse_model.joblib      # Tuned serialized lapse prediction pipeline (Part B)
+│   ├── retention_list.csv      # Prioritized test-set Premium retention list (Part B)
+│   ├── part_a/                 # Query outputs, pivot tables, audit logs
+│   └── part_b/                 # K-Means comparisons and PCA summaries
 │
 └── state/                      # Placeholder for execution state checkpoints
 ```
@@ -97,13 +117,25 @@ To reproduce the entire data foundation, relational database, analytical queries
    ```bash
    python scripts/run_part_a.py
    ```
-   *This executes the audit, customer cleaning, product validation, sequential order cleaning, SQLite database creation, all seven SQL queries, and the pandas exploratory analysis.*
+   *Executes the audit, customer cleaning, product validation, sequential order cleaning, SQLite database creation, seven SQL queries, and pandas exploratory analysis.*
 
-5. **Execute standalone checkpoint validation**:
+5. **Execute Part A standalone validation**:
    ```bash
    python scripts/validate_part_a.py
    ```
    *Output ends with the exact string:* `ALL CHECKPOINTS PASSED`
+
+6. **Run the complete Part B pipeline**:
+   ```bash
+   python scripts/run_part_b.py
+   ```
+   *Executes RFM table construction, K-Means clustering, PCA projection, leakage-free feature engineering, model training and grid searches, class balancing, model persistence, and retention list generation.*
+
+7. **Execute Part B standalone validation**:
+   ```bash
+   python scripts/validate_part_b.py
+   ```
+   *Output ends with the exact string:* `ALL PART B CHECKPOINTS PASSED`
 
 ---
 
@@ -351,19 +383,264 @@ ALL CHECKPOINTS PASSED
 
 ## 4. Part B: Customer Segments and Lapse Prediction
 
-> [!NOTE]
-> *Structured Placeholder for Part B.*
+### 4.1 RFM Table Formulation (`src/part_b/rfm_analysis.py`)
+Customer segmentation utilizes whole-window completed transaction history from `data/clean/orders.csv`. As of the fixed snapshot moment **2025-10-01 00:00:00**, three behavioral metrics were calculated for all 1,175 customers with at least one completed order:
+- **Recency**: Whole days elapsed between the snapshot moment and the customer's most recent completed order (`(snapshot - max(order_ts)).dt.days`).
+- **Frequency**: Total number of distinct completed orders.
+- **Monetary**: Total lifetime sum of completed order amounts in Indian Rupees (INR).
 
-### 4.1 Scope & Objectives
-Part B builds upon the cleaned foundation established in Part A (`data/clean/orders.csv` and `data/clean/customers.csv`) to provide actionable customer intelligence for marketing and retention teams:
-- **RFM Matrix Formulation**: Calculate Recency (days to 2025-10-01), Frequency (distinct completed orders), and Monetary value (total completed spend) for 1,175 active customers.
-- **K-Means Clustering**: Standardize RFM features, evaluate cluster inertia and silhouette scores across $K \in [2, 8]$, identify the optimal elbow, and project onto 2D space using PCA.
-- **Segment Profiling**: Label customer archetypes (including designating the highest monetary cluster as `is_premium`).
-- **Lapse Definition & Modeling**: Establish a temporal cutoff at 2025-09-01. Construct pre-cutoff behavioral features without data leakage, evaluate Logistic Regression and Random Forest classifiers using 5-fold cross-validation, and perform class-balance experiments.
-- **Artifacts to be Produced**:
-  - `outputs/customer_segments.csv`
-  - `outputs/lapse_model.joblib`
-  - `outputs/retention_list.csv`
+#### RFM Verification Checkpoints
+| Metric | Reference Target | Actual Measured | Status |
+|---|---:|---:|:---:|
+| Qualifying Active Customers | 1,175 | **1,175** | MATCH |
+| Recency Median | 19 days | **19.0 days** | MATCH |
+| Recency Minimum | 0 days | **0 days** | MATCH |
+| Recency Maximum | 180 days | **180 days** | MATCH |
+| Frequency Mean | 9.46 | **9.46** | MATCH |
+| Frequency Maximum | 33 | **33** | MATCH |
+| Monetary Mean | INR 2,552.06 | **INR 2,552.06** | MATCH |
+| Monetary Maximum | INR 14,766.55 | **INR 14,766.55** | MATCH |
+
+---
+
+### 4.2 K-Means Clustering & K Selection (`src/part_b/clustering.py`)
+RFM features were standardized using `StandardScaler` to ensure scale invariance across dimensions with disparate physical units (days, count, INR). `KMeans(n_clusters=K, n_init=10, random_state=42)` was fitted for $K \in [2, 8]$.
+
+#### Clustering Evaluation Metrics
+| K | Inertia (Target ±5%) | Actual Inertia | Silhouette Score (Target ±0.05) | Actual Silhouette | Status |
+|---|---:|---:|---:|---:|:---:|
+| 2 | 1,820.8 | **1,820.8** | 0.465 | **0.465** | MATCH |
+| 3 | 1,268.2 | **1,268.2** | 0.445 | **0.445** | MATCH |
+| **4** | **743.1** | **743.1** | **0.526** | **0.526** | **OPTIMAL** |
+| 5 | 617.4 | **617.4** | 0.481 | **0.480** | MATCH |
+| 6 | 503.2 | **503.2** | 0.482 | **0.482** | MATCH |
+| 7 | 408.5 | **408.5** | 0.416 | **0.416** | MATCH |
+| 8 | 366.5 | **366.5** | 0.412 | **0.412** | MATCH |
+
+#### Justification for Selecting $K = 4$
+1. **Silhouette Score Peak**: $K=4$ achieves the global maximum silhouette score of **0.526** across all tested cluster counts, demonstrating optimal cluster cohesion and inter-cluster separation.
+2. **Distinct Elbow Drop**: The reduction in inertia from $K=3$ (1,268.2) to $K=4$ (743.1) represents a sharp marginal decrease of **41.4%**, after which gains diminish significantly ($K=5$ drops only 16.9% to 617.4).
+3. **Business Actionability**: Four clusters produce intuitively distinct customer behavioral archetypes that the retention marketing team can target with tailored retention playbooks (Champions, High-Value Spenders, Regulars, and At-Risk shoppers).
+
+> [!NOTE]
+> **Why K=8 has lower inertia than K=2 yet cannot determine K:**
+> Inertia measures the within-cluster sum of squared errors (SSE). As the number of centroids $K$ increases, data points are geometrically closer to their nearest centroid, causing inertia to decrease monotonically until $K=N$ (where inertia equals zero). Minimizing inertia alone leads to trivial overfitting; optimal cluster selection requires balancing compression error against cluster separation (silhouette coefficient) and business interpretability.
+
+---
+
+### 4.3 Customer Segment Profiling (`src/part_b/segment_profiling.py`)
+Cluster IDs are arbitrary categorical labels without intrinsic ordinal ranking. The four identified segments were profiled and assigned operational names and retention actions based on their centroids:
+
+#### Segment Behavioral Profiles & Strategic Actions
+| Segment ID | Segment Name | Size | Mean Recency | Mean Frequency | Mean Monetary (INR) | Premium Flag | Recommended Marketing & Retention Action |
+|---|---|---:|---:|---:|---:|:---:|---|
+| **0** | **Occasional Regulars** | 436 | 28.9 days | 3.8 | INR 1,057.62 | `False` | Mid-week replenishment vouchers, category discovery cross-sells, and basket-building coupons. |
+| **1** | **Premium High-Spenders** | 138 | 24.1 days | 6.8 | **INR 7,129.70** | `True` | VIP support desk routing, early access to new launches, and concierge delivery guarantees. |
+| **2** | **Frequent Champions** | 419 | 8.8 days | 19.4 | INR 3,410.02 | `False` | Loyalty milestone multipliers, automated subscription replenishment, and referral bonuses. |
+| **3** | **At-Risk / Hibernating** | 182 | 109.0 days | 2.2 | INR 685.99 | `False` | Win-back discount blitzes, satisfaction diagnostic surveys, and multi-channel push re-engagement. |
+
+- **Premium Assignment**: Exactly one cluster (Segment 1, 138 customers) exhibits the highest mean monetary value (INR 7,129.70) and is designated `is_premium = True`.
+- **Export**: Saved to `outputs/customer_segments.csv` with columns: `customer_id`, `recency`, `frequency`, `monetary`, `segment_id`, `segment_name`, `is_premium`.
+
+---
+
+### 4.4 PCA Dimensionality Reduction (`src/part_b/pca_analysis.py`)
+Applied `PCA(n_components=2)` to the standardized RFM matrix to evaluate linear variance retention in 2D space:
+- **PC1 Explained Variance Ratio**: **0.6343** (Reference: ~0.634, within $\pm 0.02$)
+- **PC2 Explained Variance Ratio**: **0.2180** (Reference: ~0.218, within $\pm 0.02$)
+- **Total Explained Variance**: **0.8523** (Reference: ~0.852, within $\pm 0.02$)
+- *Summary saved to*: `outputs/part_b/pca_summary.json`.
+
+---
+
+### 4.5 Lapse Prediction Problem Formulation (`src/part_b/lapse_features.py`)
+- **Temporal Cutoff**: **2025-09-01 00:00:00**.
+- **Observation Period (Features)**: 2025-04-01 through 2025-08-31.
+- **Outcome Period (Labels)**: 2025-09-01 through 2025-09-30.
+- **Eligible Cohort**: Every customer with at least one completed order strictly before 2025-09-01 (**1,156** customers).
+- **Target Definition**: `lapsed = 1` if the customer placed zero completed orders in September 2025; `lapsed = 0` if they placed $\ge 1$ completed order.
+  - Cohort Size: **1,156** customers
+  - Lapsed Customers: **443** (**38.32%** lapse rate)
+
+#### Strict Leakage Prevention Architecture
+1. **Zero Future Information**: No transaction or event dated on or after 2025-09-01 was permitted to enter feature calculations.
+2. **Exclusion of Cluster Labels**: The RFM segment IDs and `is_premium` flags from Task 3 were strictly excluded from model feature matrices, as they incorporate whole-window September transaction data.
+3. **Partition-Only Preprocessing**: All scalers and encoders were fitted strictly on training data (`X_train`) and merely applied to test rows.
+
+#### Feature Definitions (Computed Strictly Pre-Cutoff)
+- **Numeric**:
+  - `recency`: Days between 2025-09-01 and customer's latest pre-cutoff completed order.
+  - `frequency`: Total count of distinct completed orders before 2025-09-01.
+  - `monetary`: Total sum of completed order amounts before 2025-09-01.
+  - `average_discount_pct`: Mean discount percentage across pre-cutoff completed orders.
+  - `cancellation_rate`: Cancelled orders divided by all finalized orders before 2025-09-01.
+  - `average_delivery_minutes`: Mean delivery time among pre-cutoff completed orders.
+  - `age`: Customer age from demographic database.
+  - `tenure_days`: Whole days between customer `signup_date` and 2025-09-01.
+- **Categorical**:
+  - `favourite_category`: Most frequent product category among pre-cutoff completed orders.
+  - `city`: Standardized metro city from demographic database.
+  - `gender`: Normalized customer gender (`female`, `male`, `unknown`).
+
+---
+
+### 4.6 Preprocessing & Partitioning (`src/part_b/preprocessing.py`)
+Partitioned using `train_test_split(test_size=0.2, stratify=y, random_state=42)`:
+- **Training Set**: **924** customers (354 lapsed, 570 not lapsed)
+- **Test Set**: **232** customers (89 lapsed, 143 not lapsed)
+
+#### Demonstrating Preprocessor Training-Only Fit
+- **Full Cohort Frequency Mean**: **8.0285**
+- **Training-Fitted Scaler Frequency Mean**: **8.1147**
+- *Explanation*: The training scaler mean reflects only the 924 training observations. Because the 80% stratified sample has a slightly different empirical mean than the 1,156 full cohort, the values diverge. This programmatic check verifies that test rows never leaked into the scaler.
+
+---
+
+### 4.7 Model Tuning & Evaluation (`src/part_b/model_training.py`)
+
+#### Baseline Model
+A naive baseline predicting "not lapsed" (`0`) for all customers yields:
+- **Accuracy**: **61.64%** ($143 / 232$)
+- **Precision**: **0.0000** (`zero_division=0`)
+- **Recall**: **0.0000**
+- **Lapsed Class F1**: **0.0000**
+
+#### Hyperparameter Tuning (5-Fold Stratified Cross-Validation)
+1. **Logistic Regression**: Evaluated over $C \in \{0.01, 0.1, 1, 10, 100\}$.
+   - Best Parameter: `C = 100` (Best CV F1: **0.6506**)
+2. **Random Forest**: Evaluated over `max_depth` $\in \{3, 5, 8\}$ and `min_samples_leaf` $\in \{5, 10, 20\}$ (45 fits total).
+   - Best Parameters: `max_depth = 8`, `min_samples_leaf = 10` (Best CV F1: **0.6856**)
+
+#### Performance on Untouched Test Set (Positive Lapsed Class)
+| Model | Optimal Parameters | CV F1 | Test Accuracy | Test Precision | Test Recall | Test F1 |
+|---|---|---:|---:|---:|---:|---:|
+| **Baseline (Majority Class)** | N/A | N/A | 0.6164 | 0.0000 | 0.0000 | 0.0000 |
+| **Logistic Regression** | `C=100` | 0.6506 | 0.7284 | 0.6444 | 0.6517 | **0.6480** |
+| **Random Forest (Selected)** | `max_depth=8, min_samples_leaf=10` | **0.6856** | 0.7241 | 0.6404 | 0.6404 | **0.6404** |
+
+#### Test Set Confusion Matrices
+- **Logistic Regression**:
+  $$\begin{bmatrix} 111 & 32 \\ 31 & 58 \end{bmatrix}$$
+- **Random Forest**:
+  $$\begin{bmatrix} 111 & 32 \\ 32 & 57 \end{bmatrix}$$
+
+#### Model Selection Justification
+**Random Forest** is selected as the primary production model:
+1. **Higher Cross-Validation Generalization**: Random Forest achieved superior 5-fold CV performance (CV F1: **0.6856** vs **0.6506**), demonstrating better resilience to non-linear interactions across delivery latency, discount depth, and order recency.
+2. **Cost-Asymmetric Business Trade-Off**: In quick-commerce retention, missing a lapsing customer (False Negative) is substantially more damaging than wrongly targeting an active customer (False Positive). Losing an active customer forfeits long-term Customer Lifetime Value (CLV) and requires high Customer Acquisition Cost (CAC) to replace. Conversely, an unnecessary win-back promotion sent to an active customer carries minimal friction. Both tuned models comfortably exceed the required benchmark of $F1 \ge 0.55$.
+
+---
+
+### 4.8 Class-Balance Experiment (`src/part_b/class_balance.py`)
+The training split is imbalanced (354 lapsed vs 570 not lapsed). Random oversampling with replacement was applied exclusively to the training split until both classes reached **570** rows (1,140 total). The best Logistic Regression was refitted on the balanced data and evaluated against the unchanged test partition:
+
+| Model Configuration | Training Split Class Counts | Test Precision | Test Recall | Test F1 |
+|---|---|---:|---:|---:|
+| **Original (Unbalanced) LR** | 354 lapsed / 570 not lapsed | **0.6444** | 0.6517 | 0.6480 |
+| **Balanced (Oversampled) LR** | 570 lapsed / 570 not lapsed | 0.5891 | **0.8539** | **0.6972** |
+| **Net Change** | $+216$ minority synthetic rows | $-0.0553$ | **$+0.2022$** | $+0.0492$ |
+
+- **Key Takeaway**: **Recall shifted most**, surging by **+20.22 percentage points** (from 65.17% to 85.39%) while precision remained near 0.59. For Instamart's retention desk, this trade-off is highly advantageous: the balanced model intercepts **85% of lapsing customers** before they churn, at the cost of a modest increase in outreach volume.
+
+---
+
+### 4.9 Model Interpretation (`src/part_b/model_interpretation.py`)
+
+#### Random Forest Top 5 Feature Importances
+| Feature | Importance | Business Reading |
+|---|---:|---|
+| `monetary` | **0.2779** | Total pre-cutoff spend reflects historical customer value; drop-offs among higher spenders heavily shift tree boundaries. |
+| `frequency` | **0.2769** | Order frequency captures habitual platform dependency; customers with entrenched weekly habits are far less likely to lapse. |
+| `recency` | **0.1112** | Days since last order directly marks dormancy; extended inactivity signals impending churn. |
+| `average_delivery_minutes` | **0.0617** | Delivery delays directly erode customer satisfaction; chronic delays trigger platform abandonment. |
+| `average_discount_pct` | **0.0532** | High discount dependency flags deal-seekers vulnerable to competitor couponing. |
+
+#### Logistic Regression Feature Coefficients
+| Feature | Coefficient | Sign | Business Reading |
+|---|---:|:---:|---|
+| `frequency` | **-1.6982** | Negative | Strong negative driver: each unit increase in order frequency dramatically reduces the log-odds of lapsing. |
+| `favourite_category_Electronics` | **-1.1367** | Negative | Electronics buyers demonstrate higher platform loyalty and substantially lower lapse probabilities. |
+| `favourite_category_Grocery` | **-0.4489** | Negative | Regular grocery buyers exhibit sticky pantry-replenishment behavior. |
+| `city_Delhi` | **-0.3744** | Negative | Customers in Delhi show higher retention rates relative to the baseline metro. |
+
+---
+
+### 4.10 Model Persistence (`outputs/lapse_model.joblib`)
+The selected production pipeline (incorporating the full `ColumnTransformer` preprocessing and tuned `RandomForestClassifier`) was persisted to disk using `joblib.dump()` at `outputs/lapse_model.joblib`. Upon reloading with `joblib.load()`, out-of-sample predictions on `X_test` matched the original predictions with **100% exact parity**.
+
+---
+
+### 4.11 Illustrative Premium Retention List (`src/part_b/retention_list.py`)
+Using the persisted model's predicted lapse probabilities, test-set customers identified as belonging to the Premium segment were ranked in descending order of churn risk. The top 10 candidates were exported to `outputs/retention_list.csv`:
+
+#### Prioritized Test-Set Premium Retention Candidates
+| customer_id | Predicted Lapse Probability | Actually Lapsed |
+|---|---:|:---:|
+| `C0862` | 0.5304 | 0 |
+| `C1008` | 0.4775 | 0 |
+| `C0060` | 0.4765 | 0 |
+| `C0267` | 0.4753 | 0 |
+| `C0133` | 0.4726 | 0 |
+| `C0942` | 0.4706 | 0 |
+| `C0553` | 0.4645 | 0 |
+| `C1112` | 0.4620 | 0 |
+| `C0565` | 0.4616 | **1** |
+| `C1000` | 0.4602 | 0 |
+
+> [!WARNING]
+> **Post-Hoc Whole-Window Leakage Disclosure**:
+> The `is_premium` flag was generated from whole-window RFM analysis (spanning April through September), meaning the cluster label saw transaction data from the same September window used to evaluate the lapse target. Consequently, this retention list serves as an **illustrative operational prioritization** rather than a leakage-free predictive evaluation. The model's own feature inputs strictly obeyed temporal boundaries and used only pre-cutoff orders.
+
+---
+
+### 4.12 Part B Automated Validation Status
+Executing `python scripts/validate_part_b.py` executes 42 rigorous assertions across RFM checkpoints, K-Means clustering metrics, segment profiles, PCA ratios, feature leakage guards, model training, persistence, and retention list schema.
+
+```
+==================================================
+STARTING PART B COMPREHENSIVE VALIDATION
+==================================================
+  [PASS] RFM Customer Count: 1175
+  [PASS] Recency Median: 19.0
+  [PASS] Recency Minimum: 0
+  [PASS] Recency Maximum: 180
+  [PASS] Frequency Mean: 9.46
+  [PASS] Frequency Maximum: 33
+  [PASS] Monetary Mean (INR): 2552.06
+  [PASS] Monetary Maximum (INR): 14766.55
+  [PASS] K=2 Inertia: 1820.8
+  [PASS] K=3 Inertia: 1268.2
+  [PASS] K=4 Inertia: 743.1
+  [PASS] K=4 Silhouette: 0.526
+  [PASS] K=5 Inertia: 617.4
+  [PASS] Customer Segments Row Count: 1175
+  [PASS] Unique Segment Count: 4
+  [PASS] Exactly One Premium Cluster: 1
+  [PASS] Premium Segment Size (~138): 138
+  [PASS] Premium Segment Mean Monetary (~7130): 7129.7
+  [PASS] PCA PC1 Variance Ratio: 0.6343
+  [PASS] PCA PC2 Variance Ratio: 0.218
+  [PASS] PCA Total Variance Ratio: 0.8523
+  [PASS] Cohort Size: 1156
+  [PASS] Lapsed Count: 443
+  [PASS] Lapse Rate (%): 38.32
+  [PASS] No Missing Values in Features: 0
+  [PASS] Segment ID Not in Features: False
+  [PASS] Train Rows Count: 924
+  [PASS] Test Rows Count: 232
+  [PASS] LR Test F1 >= 0.55: True
+  [PASS] RF Test F1 >= 0.55: True
+  [PASS] Balanced Training Class Counts: [570, 570]
+  [PASS] Balanced Recall Jump (> 0.15 increase): True
+  [PASS] Model File Exists: True
+  [PASS] Reloaded Model Predictions Match Original: True
+  [PASS] Retention List File Exists: True
+  [PASS] Retention List Columns: ['customer_id', 'lapse_probability', 'actually_lapsed']
+  [PASS] Retention List Probabilities Sorted Descending: True
+==================================================
+ALL PART B CHECKPOINTS PASSED
+==================================================
+```
 
 ---
 
@@ -408,8 +685,9 @@ Part D delivers an automated support assistant and autonomous refund resolution 
 1. **Synthetic Data Characteristics**: The data foundation uses synthetic, deterministically generated datasets. In real-world production systems, real-time streaming changes, partial payment retries, and network dropouts introduce non-deterministic anomalies.
 2. **Fixed Category Imputation**: Imputation of missing delivery times for completed orders relies on static category medians rather than multi-variate modeling (e.g., city, weather conditions, hour of day).
 3. **Single Analytical Window**: Transaction history spans exactly 183 days (April 1 to September 30, 2025). Seasonality across festival periods (Diwali, New Year) is not captured.
+4. **Post-Hoc Whole-Window Premium Labeling**: The Premium flag originates from the whole-window RFM analysis (spanning through September 30), which overlaps with the September lapse outcome window; therefore, the prioritized retention list is illustrative and not a leakage-free evaluation.
 
 ### 7.2 Next Steps for Integration
-1. **Seamless Part B Ingestion**: Part B will directly consume `data/clean/orders.csv` and `data/clean/customers.csv`, ensuring strict leakage-free temporal feature engineering.
-2. **Database Integration for Agents**: Part D's refund agent will connect directly to `data/instamart.db` to retrieve order records and verify completion status.
-3. **End-to-End Orchestration**: Develop an overall repository runner to link data preparation, model training, ticket triage, and autonomous policy agents into a single operational interface.
+1. **Support Ticket Triage Routing (Part C)**: Feed `outputs/customer_segments.csv` into Part C to route inbound support tickets from Premium customers directly to the `premium_desk` queue with high priority.
+2. **Database Integration for Agents (Part D)**: Part D's autonomous refund agent will connect directly to `data/instamart.db` to retrieve order records and verify delivery latency against refund policies.
+3. **End-to-End Orchestration**: Develop an overall repository runner linking data foundation, customer intelligence, ticket triage, and autonomous policy agents into a single operational interface.

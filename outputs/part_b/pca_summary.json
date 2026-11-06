@@ -1,0 +1,17 @@
+{
+  "pc1_explained_variance_ratio": 0.6343,
+  "pc2_explained_variance_ratio": 0.218,
+  "total_explained_variance_ratio": 0.8523,
+  "components": [
+    [
+      -0.5823861784926206,
+      0.6130974340417715,
+      0.5337957244790904
+    ],
+    [
+      0.5412387546497728,
+      -0.1974987154742168,
+      0.8173462349893083
+    ]
+  ]
+}
