@@ -1,0 +1,18 @@
+# Environment & Virtual Environments
+.env
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+*.tmp
+*.temp
+.pytest_cache/
+
+# Operating system
+.DS_Store
+Thumbs.db

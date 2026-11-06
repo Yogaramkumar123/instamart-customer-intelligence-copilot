@@ -1,0 +1,82 @@
+{
+  "grand_total_pivot": 2998668.8,
+  "city_metrics": {
+    "Bengaluru": {
+      "sum_order_amount": 523643.4,
+      "mean_order_amount": 276.47,
+      "order_count": 1894
+    },
+    "Chennai": {
+      "sum_order_amount": 463629.15,
+      "mean_order_amount": 272.72,
+      "order_count": 1700
+    },
+    "Delhi": {
+      "sum_order_amount": 502829.8,
+      "mean_order_amount": 243.62,
+      "order_count": 2064
+    },
+    "Hyderabad": {
+      "sum_order_amount": 528589.9,
+      "mean_order_amount": 284.95,
+      "order_count": 1855
+    },
+    "Mumbai": {
+      "sum_order_amount": 479058.5,
+      "mean_order_amount": 297.0,
+      "order_count": 1613
+    },
+    "Pune": {
+      "sum_order_amount": 500918.05,
+      "mean_order_amount": 252.48,
+      "order_count": 1984
+    }
+  },
+  "descriptive_stats": {
+    "mean": 269.91,
+    "median": 135.0,
+    "skewness": 4.6088,
+    "q1": 64.8,
+    "q3": 297.0,
+    "iqr": 232.2,
+    "lower_fence": -283.5,
+    "upper_fence": 645.3,
+    "lower_outliers": 0,
+    "upper_outliers": 897
+  },
+  "correlation_matrix": {
+    "order_amount": {
+      "order_amount": 1.0,
+      "discount_pct": -0.0951,
+      "quantity": 0.0873,
+      "delivery_minutes": -0.0031
+    },
+    "discount_pct": {
+      "order_amount": -0.0951,
+      "discount_pct": 1.0,
+      "quantity": -0.0004,
+      "delivery_minutes": -0.0098
+    },
+    "quantity": {
+      "order_amount": 0.0873,
+      "discount_pct": -0.0004,
+      "quantity": 1.0,
+      "delivery_minutes": -0.0126
+    },
+    "delivery_minutes": {
+      "order_amount": -0.0031,
+      "discount_pct": -0.0098,
+      "quantity": -0.0126,
+      "delivery_minutes": 1.0
+    }
+  },
+  "largest_correlation_pair": {
+    "pair": [
+      "order_amount",
+      "discount_pct"
+    ],
+    "correlation": -0.0951
+  },
+  "interpretation": "The dataset captures 11,110 completed grocery and retail quick-commerce deliveries across six Indian metros between April and September 2025. Order amounts average INR 269.91 with a median of INR 135.00, demonstrating substantial right-skewness (skewness \u2248 4.61) driven by high-ticket electronics and bundled personal-care baskets. Exactly 897 upper outliers exceed the INR 645.30 threshold (Q3 + 1.5\u00d7IQR), while zero lower outliers exist. Pairwise correlation analysis reveals the strongest association between order_amount and discount_pct (r \u2248 -0.095), followed by order_amount and quantity (r \u2248 +0.087). These negligible correlations indicate that basket value varies primarily by catalog item price rather than coupon depth or unit count. Importantly, correlation of this small magnitude does not establish causation, as promotions and order basket sizes reflect multi-factor consumer purchasing decisions.",
+  "interpretation_word_count": 124
+}

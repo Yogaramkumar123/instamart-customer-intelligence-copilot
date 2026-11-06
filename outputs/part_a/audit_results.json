@@ -1,0 +1,172 @@
+{
+  "summaries": {
+    "customers": {
+      "table_name": "customers",
+      "shape": [
+        1200,
+        5
+      ],
+      "columns": [
+        "customer_id",
+        "city",
+        "signup_date",
+        "age",
+        "gender"
+      ],
+      "dtypes": {
+        "customer_id": "object",
+        "city": "object",
+        "signup_date": "object",
+        "age": "float64",
+        "gender": "object"
+      },
+      "missing_counts": {
+        "customer_id": 0,
+        "city": 0,
+        "signup_date": 0,
+        "age": 61,
+        "gender": 30
+      },
+      "missing_percentages": {
+        "customer_id": 0.0,
+        "city": 0.0,
+        "signup_date": 0.0,
+        "age": 5.0833,
+        "gender": 2.5
+      }
+    },
+    "products": {
+      "table_name": "products",
+      "shape": [
+        40,
+        4
+      ],
+      "columns": [
+        "product_id",
+        "product_name",
+        "category",
+        "price_inr"
+      ],
+      "dtypes": {
+        "product_id": "object",
+        "product_name": "object",
+        "category": "object",
+        "price_inr": "int64"
+      },
+      "missing_counts": {
+        "product_id": 0,
+        "product_name": 0,
+        "category": 0,
+        "price_inr": 0
+      },
+      "missing_percentages": {
+        "product_id": 0.0,
+        "product_name": 0.0,
+        "category": 0.0,
+        "price_inr": 0.0
+      }
+    },
+    "orders": {
+      "table_name": "orders",
+      "shape": [
+        13084,
+        9
+      ],
+      "columns": [
+        "order_id",
+        "customer_id",
+        "product_id",
+        "quantity",
+        "order_ts",
+        "status",
+        "discount_pct",
+        "order_amount",
+        "delivery_minutes"
+      ],
+      "dtypes": {
+        "order_id": "object",
+        "customer_id": "object",
+        "product_id": "object",
+        "quantity": "int64",
+        "order_ts": "object",
+        "status": "object",
+        "discount_pct": "int64",
+        "order_amount": "object",
+        "delivery_minutes": "float64"
+      },
+      "missing_counts": {
+        "order_id": 0,
+        "customer_id": 0,
+        "product_id": 0,
+        "quantity": 0,
+        "order_ts": 0,
+        "status": 0,
+        "discount_pct": 0,
+        "order_amount": 53,
+        "delivery_minutes": 2541
+      },
+      "missing_percentages": {
+        "order_id": 0.0,
+        "customer_id": 0.0,
+        "product_id": 0.0,
+        "quantity": 0.0,
+        "order_ts": 0.0,
+        "status": 0.0,
+        "discount_pct": 0.0,
+        "order_amount": 0.4051,
+        "delivery_minutes": 19.4207
+      }
+    },
+    "tickets": {
+      "table_name": "tickets",
+      "shape": [
+        164,
+        5
+      ],
+      "columns": [
+        "ticket_id",
+        "customer_id",
+        "order_id",
+        "text",
+        "true_category"
+      ],
+      "dtypes": {
+        "ticket_id": "object",
+        "customer_id": "object",
+        "order_id": "object",
+        "text": "object",
+        "true_category": "object"
+      },
+      "missing_counts": {
+        "ticket_id": 0,
+        "customer_id": 0,
+        "order_id": 0,
+        "text": 0,
+        "true_category": 0
+      },
+      "missing_percentages": {
+        "ticket_id": 0.0,
+        "customer_id": 0.0,
+        "order_id": 0.0,
+        "text": 0.0,
+        "true_category": 0.0
+      }
+    }
+  },
+  "orders_audit": {
+    "raw_order_rows": 13084,
+    "exact_duplicate_rows": 119,
+    "pending_rows": 656,
+    "distinct_order_ids": 12309,
+    "non_numeric_amounts": 120,
+    "negative_delivery_times": 106,
+    "blank_delivery_times": 2541
+  },
+  "customers_audit": {
+    "blank_ages": 61,
+    "ages_outside_10_100": 6,
+    "distinct_raw_city_spellings": 24,
+    "distinct_nonblank_raw_gender_spellings": 10,
+    "blank_genders": 30
+  }
+}
