@@ -13,7 +13,7 @@ The **Instamart Customer Intelligence & Support Copilot** provides an end-to-end
 - **Part A: Data Foundation (Clean, Store, Query)** — Ingestion, multi-table auditing, deterministic sequential data cleaning, relational SQLite data warehouse modeling, and analytical querying via SQL and pandas.
 - **Part B: Customer Segmentation & Lapse Prediction** — RFM feature extraction, K-Means clustering, PCA dimensionality reduction, and leakage-free customer lapse prediction.
 - **Part C: Support Ticket Triage with Guardrails** — PII masking, token budgeting, transient error recovery, and LLM-powered ticket classification.
-- **Part D: Policy RAG Assistant & Refund Agent** *(Future Integration)* — Vectorized chunk retrieval over operating policies and an autonomous ReAct refund agent.
+- **Part D: Policy RAG Assistant & Refund Agent** — Deterministic chunking, TF-IDF vector retrieval over operational policy documents, grounded policy question answering, and an autonomous ReAct refund agent with persistent crash recovery.
 
 ```
 instamart-copilot/
@@ -51,18 +51,33 @@ instamart-copilot/
 │   │   ├── retention_list.py   # Illustrative Premium retention ranking
 │   │   └── validate.py         # Comprehensive Part B validation suite
 │   │
-│   └── part_c/
+│   ├── part_c/
+│   │   ├── __init__.py
+│   │   ├── guardrails.py       # Input token and empty ticket guardrails
+│   │   ├── pii_redaction.py    # Sequential regex PII masking and verification
+│   │   ├── prompts.py          # Zero-shot and few-shot system prompts
+│   │   ├── retry_handler.py    # Exponential backoff with jitter on TransientLLMError
+│   │   ├── classifier.py       # Ticket classifier executing prompt & validation
+│   │   ├── output_validation.py# Strict JSON parsing & lowercase keyword extraction
+│   │   ├── token_budget.py     # Cumulative token budget enforcement
+│   │   ├── routing.py          # Segment-driven 4-tier ticket routing engine
+│   │   ├── pipeline.py         # End-to-end triage pipeline & evaluation metrics
+│   │   └── validate.py         # Comprehensive Part C validation suite
+│   │
+│   └── part_d/
 │       ├── __init__.py
-│       ├── guardrails.py       # Input token and empty ticket guardrails
-│       ├── pii_redaction.py    # Sequential regex PII masking and verification
-│       ├── prompts.py          # Zero-shot and few-shot system prompts
-│       ├── retry_handler.py    # Exponential backoff with jitter on TransientLLMError
-│       ├── classifier.py       # Ticket classifier executing prompt & validation
-│       ├── output_validation.py# Strict JSON parsing & lowercase keyword extraction
-│       ├── token_budget.py     # Cumulative token budget enforcement
-│       ├── routing.py          # Segment-driven 4-tier ticket routing engine
-│       ├── pipeline.py         # End-to-end triage pipeline & evaluation metrics
-│       └── validate.py         # Comprehensive Part C validation suite
+│       ├── document_loader.py  # Ingestion of the 5 policy documents
+│       ├── chunking.py         # Deterministic 40-word sliding window chunker
+│       ├── vector_store.py     # TF-IDF matrix and cosine similarity search
+│       ├── retrieval.py        # Top-k chunk retrieval interface
+│       ├── policy_assistant.py # Grounded policy question answerer & evaluation
+│       ├── tools.py            # Five autonomous agent tool functions
+│       ├── tool_registry.py    # Tool specifications schema and dispatch map
+│       ├── refund_calculator.py# Deterministic policy-governed refund calculation
+│       ├── agent.py            # ReAct agent loop with timeout and token ceilings
+│       ├── checkpoint.py       # State persistence and snapshot manager
+│       ├── resume.py           # Resumable execution loop from saved checkpoints
+│       └── validate.py         # Comprehensive Part D validation suite
 │
 ├── scripts/
 │   ├── run_part_a.py           # End-to-end master orchestration pipeline (Part A)
@@ -70,7 +85,9 @@ instamart-copilot/
 │   ├── run_part_b.py           # End-to-end master orchestration pipeline (Part B)
 │   ├── validate_part_b.py      # Standalone verification runner (Part B)
 │   ├── run_part_c.py           # End-to-end master orchestration pipeline (Part C)
-│   └── validate_part_c.py      # Standalone verification runner (Part C)
+│   ├── validate_part_c.py      # Standalone verification runner (Part C)
+│   ├── run_part_d.py           # End-to-end master orchestration pipeline (Part D)
+│   └── validate_part_d.py      # Standalone verification runner (Part D)
 │
 ├── data/
 │   ├── raw/                    # Raw generated CSV files and policies
@@ -87,10 +104,12 @@ instamart-copilot/
 │   ├── retention_list.csv      # Prioritized test-set Premium retention list (Part B)
 │   ├── triage_results.csv      # Final 164-ticket production routing table (Part C)
 │   ├── triage_budget_demo.csv  # Token budget cut-off demonstration (Part C)
+│   ├── agent_runs.jsonl        # Seven ReAct scenario audit logs (Part D)
+│   ├── refund_ledger.jsonl     # Transactional ledger of issued and escalated refunds (Part D)
 │   ├── part_a/                 # Query outputs, pivot tables, audit logs
 │   └── part_b/                 # K-Means comparisons and PCA summaries
 │
-└── state/                      # Placeholder for execution state checkpoints
+└── state/                      # Persistent execution checkpoint snapshots
 ```
 
 ### 1.2 Technology Stack & Dependencies
@@ -165,6 +184,23 @@ To reproduce the entire data foundation, relational database, analytical queries
    python scripts/validate_part_c.py
    ```
    *Output ends with the exact string:* `ALL PART C CHECKPOINTS PASSED`
+
+10. **Run the complete Part D pipeline**:
+    ```bash
+    python scripts/run_part_d.py
+    ```
+    *Executes policy document chunking, TF-IDF vector retrieval, RAG grounding evaluation, zero-overlap comparison, tool definitions, ReAct refund agent across all seven scenarios (`outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl`), safety limits, crash recovery demonstration, and automated validation.*
+
+11. **Execute Part D standalone validation**:
+    ```bash
+    python scripts/validate_part_d.py
+    ```
+    *Output ends with the exact string:*
+    ```text
+    ==================================================
+    ALL PART D CHECKPOINTS PASSED
+    ==================================================
+    ```
 
 ---
 
@@ -913,18 +949,235 @@ ALL PART C CHECKPOINTS PASSED
 
 ## 6. Part D: Policy RAG Assistant and Refund Agent
 
-> [!NOTE]
-> *Structured Placeholder for Part D.*
+### 6.1 Architecture & Workflow Overview
+Customer support in quick-commerce operations requires fast, grounded policy lookups and autonomous, audit-trailed refund resolution. Part D delivers two integrated AI capabilities:
+1. **Policy Question-Answering Assistant (RAG)**: A retrieval-augmented generation engine that chunks operating policy documents into deterministic 40-word sliding windows with 10-word overlap, builds a TF-IDF vector space, retrieves relevant context chunks via cosine similarity, and synthesizes strictly grounded answers using `mock_llm.chat()` under the `POLICY ASSISTANT` harness.
+2. **Autonomous ReAct Refund Agent**: A tool-using reasoning agent that interacts with the analytical SQLite database from Part A (`data/instamart.db`), policy retrieval, and a deterministic refund calculator to decide refund eligibility, record ledger entries (`outputs/refund_ledger.jsonl`), enforce multi-tier safety limits, and persist execution snapshots to `state/` for resumable crash recovery.
 
-### 6.1 Scope & Objectives
-Part D delivers an automated support assistant and autonomous refund resolution agent:
-- **Policy Retrieval-Augmented Generation (RAG)**: Chunk operational policy documents (40 words with 10-word overlap), vectorize chunks using TF-IDF, and retrieve grounded contexts via cosine similarity to answer customer queries.
-- **ReAct Refund Agent**: Autonomous agent capable of calling tools (`get_order` from `data/instamart.db`, `search_policy`, `calculate_refund`, `issue_refund`, `escalate_to_human`).
-- **Safety & Fallback Mechanisms**: Guard against infinite loops (`FALLBACK_MAX_ITERATIONS`), enforce token limits (`FALLBACK_TOKEN_LIMIT`), and wall-clock timeouts (`FALLBACK_TIMEOUT`).
-- **Resumability**: State persistence across tool calls in `state/` allowing crash recovery without duplicate executions.
-- **Artifacts to be Produced**:
-  - `outputs/agent_runs.jsonl`
-  - `outputs/refund_ledger.jsonl`
+```
+Incoming Customer Inquiry / Refund Request
+                    │
+                    ▼
+       ┌────────────────────────┐
+       │ Inbound Request Router │
+       └───────────┬────────────┘
+                   │
+         ┌─────────┴─────────┐
+         ▼                   ▼
+[Policy RAG Assistant]  [Autonomous ReAct Refund Agent]
+  - 15 Chunks (TF-IDF)    - Tools: get_order, search_policy,
+  - Cosine Similarity              calculate_refund, issue_refund,
+  - Grounded Synthesis             escalate_to_human
+  - Fallback Handling     - Safety: Timeout, Token, Max Iterations
+                          - Crash Recovery: state/*.json Checkpoints
+                          - Ledger: outputs/refund_ledger.jsonl
+```
+
+---
+
+### 6.2 Policy Document Ingestion & Chunking (`src/part_d/chunking.py`)
+Five official company policy documents are ingested from `data/policies/`:
+1. `refund_policy.txt`: Rules governing completed order delivery latency, thresholds, approval tiers, and claims windows.
+2. `delivery_policy.txt`: Promised SLA delivery times, fee thresholds, rain extensions, and OTP requirements.
+3. `payment_policy.txt`: Payment channels (UPI, cards, COD limits), failed transaction turnaround, and wallet terms.
+4. `privacy_policy.txt`: Customer data handling, address retention periods (180 days), and deletion timelines.
+5. `escalation_policy.txt`: Fraud ticket priority (2-hour SLA), premium tier escalation, and agent handoff ceilings.
+
+#### Deterministic Sliding-Window Chunking Algorithm
+- **Configuration**: `CHUNK_SIZE = 40` words, `CHUNK_OVERLAP = 10` words (stride $= 30$ words).
+- **Algorithm**: The document text is split on whitespace into words. Chunk $0$ spans words $0$ to $39$; Chunk $1$ starts at word $30$ and spans to word $69$; subsequent chunks advance by $30$ words. The process terminates immediately after the first chunk whose boundary reaches or exceeds the document word count. Each chunk records its originating filename.
+
+#### Policy Chunk Distribution Checkpoints
+| Policy Document | Total Words | Overlapping Chunks (`overlap=10`) | Zero-Overlap Chunks (`overlap=0`) | Status |
+|---|---:|---:|---:|:---:|
+| `refund_policy.txt` | 119 | **4** | 3 | Matched |
+| `delivery_policy.txt` | 100 | **3** | 3 | Matched |
+| `escalation_policy.txt` | 78 | **3** | 2 | Matched |
+| `payment_policy.txt` | 86 | **3** | 3 | Matched |
+| `privacy_policy.txt` | 68 | **2** | 2 | Matched |
+| **Total Corpus** | **451** | **15** | **13** | **Exact Parity** |
+
+---
+
+### 6.3 TF-IDF Vectorization & Cosine Similarity Retrieval (`src/part_d/vector_store.py`)
+Scikit-learn's `TfidfVectorizer()` is fitted across all 15 chunk texts to construct a sparse document-term matrix. Incoming queries are transformed into the same vector space, and chunks are ranked by cosine similarity:
+$$\text{Cosine Similarity}(q, d) = \frac{q \cdot d}{\|q\|_2 \|d\|_2}$$
+
+#### Understanding TF-IDF
+- **Term Frequency (TF)** measures how frequently a given word appears in a specific chunk relative to the chunk length, reflecting local word significance.
+- **Inverse Document Frequency (IDF)** measures how rare a word is across the entire corpus by taking the logarithm of the inverse chunk frequency, heavily weighting discriminative keywords while downweighting ubiquitous terms.
+- **Core Limitation of TF-IDF**: TF-IDF relies strictly on surface-level lexical matching and possesses no semantic awareness. Queries expressing identical business concepts with alternative synonyms (e.g., *"spoiled milk"* vs *"expired dairy"*, or *"rider uncontactable"* vs *"driver not answering"*) yield near-zero similarity scores if exact term overlap is absent.
+
+#### Retrieval Verification
+For the reference query `"refund policy late delivery"`, the top three ranked chunks all originate from `refund_policy.txt`:
+1. `refund_policy.txt` (Score: **0.2719**): `"...order is delivered in more than 45 minutes, the customer receives a full refund..."`
+2. `refund_policy.txt` (Score: **0.2514**): `"Refund Policy. A refund can be requested only for orders whose status is completed..."`
+3. `refund_policy.txt` (Score: **0.2454**): `"...late-delivery refund is paid. Refunds up to INR 1000 are approved automatically..."`
+
+---
+
+### 6.4 Grounded Policy RAG Assistant (`src/part_d/policy_assistant.py`)
+`answer(question)` retrieves the top $k=3$ chunks, formats them into a strictly structured user payload, and prompts `mock_llm.chat()` under the `POLICY ASSISTANT` system marker:
+
+#### Prompt Contract
+```text
+SYSTEM:
+You are an automated POLICY ASSISTANT. Answer the customer's question strictly using the provided policy context. Do not invent or extrapolate policies. If the answer cannot be found in the context, state that you could not find that information.
+
+USER:
+CONTEXT:
+[refund_policy.txt] ...
+[delivery_policy.txt] ...
+[payment_policy.txt] ...
+
+QUESTION:
+What delivery time makes a completed order eligible for a full refund?
+```
+
+#### Evaluation on 14 Questions (`data/raw/policy_eval.csv`)
+| Evaluation Category | Test Questions | Passed | Success Rate | Checkpoint Reference |
+|---|---:|---:|---:|:---:|
+| Expected Document in Top 3 Sources | 12 | **12** | **100.0%** | 12/12 |
+| Expected Fact Grounded in Answer (Case-Sensitive) | 12 | **12** | **100.0%** | 12/12 |
+| Unanswerable Questions Rejected with Fallback | 2 | **2** | **100.0%** | 2/2 |
+
+Both unanswerable questions (company mascot colour, cricket world cup winner) were rejected with the exact fallback:
+`"I could not find that information in the policy documents."`
+
+---
+
+### 6.5 Zero-Overlap Comparison Experiment (`src/part_d/retrieval.py`)
+To quantify the benefit of the 10-word sliding window overlap, the entire grounding evaluation was repeated using non-overlapping chunks (`chunk_size=40, chunk_overlap=0`):
+
+#### Overlap vs Zero-Overlap Retrieval & Grounding Performance
+| Metric | Overlapping Chunks (`overlap=10`) | Zero-Overlap Chunks (`overlap=0`) | Impact of Overlap |
+|---|---:|---:|---|
+| Total Chunks | 15 | 13 | +2 chunks (+15.4%) |
+| Answerable Document in Top 3 | 12 / 12 (100.0%) | 12 / 12 (100.0%) | Identical top document retrieval |
+| Answerable Fact Grounded | **12 / 12 (100.0%)** | **10 / 12 (83.33%)** | **-2 failed questions** |
+| Unanswerable Correctly Rejected | 2 / 2 (100.0%) | 2 / 2 (100.0%) | Identical fallback handling |
+
+#### Why Zero-Overlap Breaks Policy Answers
+When `overlap=0`, natural sentences are arbitrarily truncated at fixed word boundaries:
+1. **Question 1**: *"What delivery time makes a completed order eligible for a full refund?"*
+   - In `refund_policy.txt`, the clause `"...delivered in more than 45 minutes, the customer receives a full refund of the order amount."` is split across chunk 0 and chunk 1. Chunk 1 retrieves the fragment `"receives a full refund of the order amount."`, completely omitting the prerequisite clause `"more than 45 minutes"`.
+2. **Question 8**: *"How soon is money returned when a payment fails but is deducted?"*
+   - In `payment_policy.txt`, the condition and resolution `"If a payment fails but money is deducted, the amount is returned automatically within 48 hours."` has its terminal phrase split, causing the model to retrieve an incomplete sentence missing `"48 hours"`.
+
+Sliding window overlap ensures boundary continuity, preserving semantic integrity across adjacent windows.
+
+---
+
+### 6.6 Tool Specifications & Dispatch Registry (`src/part_d/tools.py`, `src/part_d/tool_registry.py`)
+Five tools were implemented to empower the autonomous refund agent:
+
+| Tool Name | Description | JSON Schema Parameters | Return Structure |
+|---|---|---|---|
+| `get_order` | Query analytical SQLite DB (`data/instamart.db`) for order status, amount, and delivery minutes. | `order_id` (string) | `{"order_id", "status", "order_amount", "delivery_minutes"}` or `{"error": "order not found"}` |
+| `search_policy` | Retrieve grounded policy clauses via TF-IDF cosine similarity. | `query` (string) | `{"results": [...]}` |
+| `calculate_refund` | Compute policy-governed refund in INR based on order amount and delivery duration. | `order_amount` (number), `delivery_minutes` (integer) | `{"refund_inr": <amount>}` |
+| `issue_refund` | Execute and log approved refund ($\le \text{INR } 1000$) to `outputs/refund_ledger.jsonl`. | `order_id` (string), `refund_inr` (number) | `{"refund_inr": <amount>}` |
+| `escalate_to_human` | Escalate high-value refund ($> \text{INR } 1000$) to human lead and record in ledger. | `order_id` (string), `refund_inr` (number) | `{"refund_inr": <amount>}` |
+
+#### Refund Decision Business Rules
+1. **Completion Prerequisite**: Only orders with `status == "completed"` are eligible for refunds. Cancelled orders were never billed ($\text{refund} = \text{INR } 0.00$).
+2. **Delivery Latency Threshold**: Completed orders delivered in $\le 45$ minutes are on-time ($\text{refund} = \text{INR } 0.00$).
+3. **Full Refund SLA**: Completed orders delivered in $> 45$ minutes receive a **100% full refund** of `order_amount`. Partial refunds are prohibited.
+4. **Approval Threshold**: Eligible refunds up to $\text{INR } 1000$ are automatically approved via `issue_refund`. Refunds strictly exceeding $\text{INR } 1000$ mandate human approval via `escalate_to_human` and must never be issued automatically.
+
+---
+
+### 6.7 ReAct Agent Loop & Scenario Execution (`src/part_d/agent.py`)
+`run_agent(user_message, scenario_id, max_iterations=6, token_limit=6000, time_limit_seconds=10)` executes an autonomous reasoning and action loop. All 7 rows from `data/raw/agent_scenarios.csv` were executed, logging audit trails to `outputs/agent_runs.jsonl`:
+
+#### Seven Agent Scenario Execution Results
+| Scenario | Inbound Message / Order ID | Status | Refund Amount (INR) | Model Calls | Tokens Used | Tools Executed Sequence |
+|---|---|---|---:|---:|---:|---|
+| **S1** | `ORD-100048` (Late, small order) | `REFUND` | **INR 128.25** | **5** | 1,147 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund` |
+| **S2** | `ORD-100067` (Late, small order) | `REFUND` | **INR 135.00** | **5** | 1,147 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund` |
+| **S3** | `ORD-100145` (Late, high-value order) | `ESCALATE` | **INR 1,999.00** | **5** | 1,134 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `escalate_to_human` |
+| **S4** | `ORD-100001` (On-time, delivered 18m) | `DENIED` | **INR 0.00** | **4** | 805 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` |
+| **S5** | `ORD-100025` (Cancelled order) | `DENIED` | **INR 0.00** | **3** | 487 | `get_order` $\rightarrow$ `search_policy` |
+| **S6** | `ORD-999999` (Non-existent order) | `NOT_FOUND` | **INR 0.00** | **2** | 172 | `get_order` |
+| **S7** | `ORD-100048` with `[LOOP]` | `FALLBACK_MAX_ITERATIONS` | **INR 0.00** | **6** | 3,300 | `search_policy` (repeated 6 times) |
+
+> [!NOTE]
+> Every scenario refund amount matches `expected_refund_inr` within INR 0.01. Scenario S1 completed in exactly **5 model calls**, and scenario S7 executed all 6 iterations before gracefully stopping with `FALLBACK_MAX_ITERATIONS` under the default 6000 token ceiling (consuming 3,300 tokens).
+
+---
+
+### 6.8 Safety Limits & Graceful Fallback Demonstrations
+Three independent safety boundaries protect system resources:
+1. **Iteration Limit**: After 6 calls without terminal resolution, S7 terminates with `FALLBACK_MAX_ITERATIONS`.
+2. **Token Ceiling Guard**: Evaluated after every model call. When `tokens_used > token_limit`, the agent halts immediately without executing the requested tool.
+   - **Demonstration**: Scenario S1 executed with `token_limit = 200` halted after Call 1 (consuming 230 prompt/completion tokens) with status **`FALLBACK_TOKEN_LIMIT`**.
+3. **Wall-Clock Timeout**: Evaluated at the top of every iteration using `time.monotonic()`. When `elapsed >= time_limit_seconds`, execution halts before model invocation.
+   - **Demonstration**: Scenario S1 executed with `time_limit_seconds = 0` halted immediately before Call 1 with status **`FALLBACK_TIMEOUT`**.
+
+---
+
+### 6.9 Resumable Execution & Crash Recovery Demonstration (`src/part_d/checkpoint.py`, `src/part_d/resume.py`)
+After each tool observation is appended, a state snapshot is saved to `state/<run_id>.json` recording `run_id`, `scenario_id`, `messages`, `tokens_used`, `llm_calls`, `step_count`, and `tools_executed`.
+
+#### Required Crash Demonstration on Scenario S1
+- **Phase 1 (Initial Run & Crash)**:
+  - Tool 1 executed: `get_order` (order details loaded, checkpoint saved).
+  - Tool 2 executed: `search_policy` (policy retrieved, checkpoint saved).
+  - Simulated crash triggered: `SimulatedAgentCrash: Simulated crash after executing tool 2: search_policy (run_id: crash_recovery_demo_s1)`.
+- **Phase 2 (Resumed Execution via `resume_agent`)**:
+  - Checkpoint loaded from `state/crash_recovery_demo_s1.json`.
+  - Context restored with conversation history and previous tool results.
+  - Tool 3 executed: `calculate_refund` (amount INR 128.25 calculated).
+  - Tool 4 executed: `issue_refund` (recorded in ledger).
+  - Final answer returned: `"REFUND: INR 128.25 issued."` with status **`REFUND`**.
+
+#### Exact Sequence of Tools Executed Across Crash and Resume
+```text
+1. get_order          (Executed in initial run before crash)
+2. search_policy      (Executed in initial run before crash; snapshot saved)
+[CRASH SIMULATED]
+[RESUME_AGENT CALLED]
+3. calculate_refund   (Executed in resumed run; restored from checkpoint)
+4. issue_refund       (Executed in resumed run; ledger updated once)
+```
+- **Total Combined Tool Executions**: Exactly **4** tools.
+- **Zero Duplication**: No tool was re-executed.
+- **Ledger Integrity**: `outputs/refund_ledger.jsonl` contains exactly **one** refund issuance for `ORD-100048` from the crash demonstration run.
+
+---
+
+### 6.10 ReAct versus Plan-and-Execute Architecture Comparison
+
+> In this quick-commerce refund workflow, the **ReAct (Reasoning + Acting)** architecture is fundamentally superior to a **Plan-and-Execute** design.
+>
+> **Model Calls & Token Efficiency**: Plan-and-execute prompts the LLM once upfront to generate a full sequential plan (`get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund`), executing tools deterministically and replanning only on failure. For straightforward happy paths like S1 (5 calls, 1,147 tokens), plan-and-execute would reduce LLM calls to 1 or 2. However, in real-world triage, inquiries frequently branch or fail early: S6 (`NOT_FOUND`) terminates in 2 calls (172 tokens), and S5 (cancelled order) terminates in 3 calls (487 tokens). Plan-and-execute would waste tokens pre-generating invalid steps (e.g., attempting to calculate and issue refunds for non-existent orders) before encountering execution exceptions.
+>
+> **Handling Unexpected Observations**: ReAct naturally inspects runtime observations dynamically. When `get_order` returns `{"error": "order not found"}`, ReAct immediately halts and responds with `NOT_FOUND`. A plan-and-execute agent requires complex error-handling and replanning prompts when reality diverges from static assumptions.
+>
+> **Architectural Recommendation**: For financial transaction workflows where data integrity, idempotency, and early termination on invalid orders are paramount, ReAct provides adaptive grounding, minimal unnecessary tool invocations, and strict step-by-step verification.
+
+---
+
+### 6.11 Part D Automated Validation Status
+Executing `python scripts/validate_part_d.py` validates all Part D functional requirements:
+
+```text
+============================================================
+RUNNING PART D COMPREHENSIVE VALIDATION SUITE
+============================================================
+  [PASS] Task 1: 5 policy files loaded, exactly 15 chunks (refund 4, delivery 3, escalation 3, payment 3, privacy 2).
+  [PASS] Task 2: TF-IDF retrieval top 3 chunks for 'refund policy late delivery' all from refund_policy.txt with calculated cosine scores.
+  [PASS] Tasks 3 & 4: Grounding evaluation passed with 12/12 doc retrieved, 12/12 fact grounded, 2/2 unanswerable fallback.
+  [PASS] Task 4 Zero-Overlap: Successfully reproduced failure in zero-overlap experiment (2 questions failed due to chunk boundary splitting).
+  [PASS] Task 5: Tool specs, dispatch map, DB lookups, and refund calculation rules verified.
+  [PASS] Task 6: All seven scenarios matched expected outcomes, S1 took 5 calls, S7 reached FALLBACK_MAX_ITERATIONS.
+  [PASS] Task 7: Token limit demo (FALLBACK_TOKEN_LIMIT) and Timeout demo (FALLBACK_TIMEOUT) verified.
+  [PASS] Task 8: Crash and resume demonstration verified (exact 4 tool sequence: get_order, search_policy, calculate_refund, issue_refund; status REFUND INR 128.25).
+  [PASS] Artifacts: Outputs ledger validated with 4 records (both issue_refund and escalate_to_human present).
+============================================================
+ALL PART D CHECKPOINTS PASSED
+============================================================
+```
 
 ---
 
@@ -937,8 +1190,9 @@ Part D delivers an automated support assistant and autonomous refund resolution 
 4. **Post-Hoc Whole-Window Premium Labeling**: The Premium flag originates from the whole-window RFM analysis (spanning through September 30), which overlaps with the September lapse outcome window; therefore, the prioritized retention list is illustrative and not a leakage-free evaluation.
 5. **PII Masking Scope**: Current regex masking targets standard email structures, 10-digit Indian mobile numbers, and Swiggy order patterns. Unstructured personal identifiers (such as street addresses, customer names, or UPI IDs) require named entity recognition (NER) models for complete redaction in open production environments.
 6. **Token Budgeting Dynamics**: The token budget manager operates at batch-level cut-offs; production implementations would benefit from customer-level rate-limiting and dynamic prompt token compression.
+7. **TF-IDF Lexical Limitations**: The policy retrieval engine is based on term-frequency inverted indexes. While effective for exact keyword matches, it cannot capture deep semantic paraphrasing; integrating dense embedding vector search (e.g. bi-encoders) would improve domain generalization.
 
-### 7.2 Next Steps for Integration
-1. **Database Integration for Agents (Part D)**: Part D's autonomous refund agent will connect directly to `data/instamart.db` to retrieve order records and verify delivery latency against refund policies.
-2. **Policy Document Chunking & TF-IDF Retrieval (Part D)**: Chunk the five policy documents in `data/policies/` into 40-word segments (10-word overlap) and integrate TF-IDF cosine similarity search.
-3. **End-to-End Orchestration**: Develop an overall repository runner linking data foundation, customer intelligence, ticket triage, and autonomous policy agents into a single operational interface.
+### 7.2 Next Steps for Production Deployment
+1. **Hybrid Dense-Sparse Retrieval**: Combine TF-IDF sparse matching with neural dense embeddings (BM25 + ColBERT/dense vector search) and cross-encoder re-ranking for enterprise policy retrieval.
+2. **Distributed Checkpointing**: Migrate state checkpoints from local disk JSON files to a distributed cache (e.g., Redis or DynamoDB) with distributed locking for multi-worker agent scalability.
+3. **Automated End-to-End Orchestration**: Package the entire four-part suite into a containerized service with unified REST endpoints, telemetry logging, and continuous evaluation dashboards.
