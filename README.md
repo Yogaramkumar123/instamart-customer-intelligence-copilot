@@ -11,8 +11,8 @@ Quick-commerce environments like Swiggy Instamart process tens of thousands of o
 
 The **Instamart Customer Intelligence & Support Copilot** provides an end-to-end analytical foundation structured into four progressive stages:
 - **Part A: Data Foundation (Clean, Store, Query)** — Ingestion, multi-table auditing, deterministic sequential data cleaning, relational SQLite data warehouse modeling, and analytical querying via SQL and pandas.
-- **Part B: Customer Segmentation & Lapse Prediction** *(Future Integration)* — RFM feature extraction, K-Means clustering, PCA dimensionality reduction, and leakage-free customer lapse prediction.
-- **Part C: Support Ticket Triage with Guardrails** *(Future Integration)* — PII masking, token budgeting, transient error recovery, and LLM-powered ticket classification.
+- **Part B: Customer Segmentation & Lapse Prediction** — RFM feature extraction, K-Means clustering, PCA dimensionality reduction, and leakage-free customer lapse prediction.
+- **Part C: Support Ticket Triage with Guardrails** — PII masking, token budgeting, transient error recovery, and LLM-powered ticket classification.
 - **Part D: Policy RAG Assistant & Refund Agent** *(Future Integration)* — Vectorized chunk retrieval over operating policies and an autonomous ReAct refund agent.
 
 ```
@@ -37,25 +37,40 @@ instamart-copilot/
 │   │   ├── pandas_analysis.py  # Pivot tables, descriptive stats & correlations
 │   │   └── validate.py         # Automated checkpoint validation suite
 │   │
-│   └── part_b/
+│   ├── part_b/
+│   │   ├── __init__.py
+│   │   ├── rfm_analysis.py     # Customer RFM feature calculation
+│   │   ├── clustering.py       # K-Means clustering (K=2..8) and selection
+│   │   ├── segment_profiling.py# Cluster profiling, naming & export
+│   │   ├── pca_analysis.py     # 2D PCA projection & variance analysis
+│   │   ├── lapse_features.py   # Leakage-free cohort & feature matrix
+│   │   ├── preprocessing.py    # Stratified split & ColumnTransformer
+│   │   ├── model_training.py   # Baseline, Logistic Regression & Random Forest tuning
+│   │   ├── class_balance.py    # Training-only random oversampling experiment
+│   │   ├── model_interpretation.py # Feature importance & coefficient readings
+│   │   ├── retention_list.py   # Illustrative Premium retention ranking
+│   │   └── validate.py         # Comprehensive Part B validation suite
+│   │
+│   └── part_c/
 │       ├── __init__.py
-│       ├── rfm_analysis.py     # Customer RFM feature calculation
-│       ├── clustering.py       # K-Means clustering (K=2..8) and selection
-│       ├── segment_profiling.py# Cluster profiling, naming & export
-│       ├── pca_analysis.py     # 2D PCA projection & variance analysis
-│       ├── lapse_features.py   # Leakage-free cohort & feature matrix
-│       ├── preprocessing.py    # Stratified split & ColumnTransformer
-│       ├── model_training.py   # Baseline, Logistic Regression & Random Forest tuning
-│       ├── class_balance.py    # Training-only random oversampling experiment
-│       ├── model_interpretation.py # Feature importance & coefficient readings
-│       ├── retention_list.py   # Illustrative Premium retention ranking
-│       └── validate.py         # Comprehensive Part B validation suite
+│       ├── guardrails.py       # Input token and empty ticket guardrails
+│       ├── pii_redaction.py    # Sequential regex PII masking and verification
+│       ├── prompts.py          # Zero-shot and few-shot system prompts
+│       ├── retry_handler.py    # Exponential backoff with jitter on TransientLLMError
+│       ├── classifier.py       # Ticket classifier executing prompt & validation
+│       ├── output_validation.py# Strict JSON parsing & lowercase keyword extraction
+│       ├── token_budget.py     # Cumulative token budget enforcement
+│       ├── routing.py          # Segment-driven 4-tier ticket routing engine
+│       ├── pipeline.py         # End-to-end triage pipeline & evaluation metrics
+│       └── validate.py         # Comprehensive Part C validation suite
 │
 ├── scripts/
 │   ├── run_part_a.py           # End-to-end master orchestration pipeline (Part A)
 │   ├── validate_part_a.py      # Standalone verification runner (Part A)
 │   ├── run_part_b.py           # End-to-end master orchestration pipeline (Part B)
-│   └── validate_part_b.py      # Standalone verification runner (Part B)
+│   ├── validate_part_b.py      # Standalone verification runner (Part B)
+│   ├── run_part_c.py           # End-to-end master orchestration pipeline (Part C)
+│   └── validate_part_c.py      # Standalone verification runner (Part C)
 │
 ├── data/
 │   ├── raw/                    # Raw generated CSV files and policies
@@ -70,6 +85,8 @@ instamart-copilot/
 │   ├── customer_segments.csv   # Customer segment profiles (Part B)
 │   ├── lapse_model.joblib      # Tuned serialized lapse prediction pipeline (Part B)
 │   ├── retention_list.csv      # Prioritized test-set Premium retention list (Part B)
+│   ├── triage_results.csv      # Final 164-ticket production routing table (Part C)
+│   ├── triage_budget_demo.csv  # Token budget cut-off demonstration (Part C)
 │   ├── part_a/                 # Query outputs, pivot tables, audit logs
 │   └── part_b/                 # K-Means comparisons and PCA summaries
 │
@@ -136,6 +153,18 @@ To reproduce the entire data foundation, relational database, analytical queries
    python scripts/validate_part_b.py
    ```
    *Output ends with the exact string:* `ALL PART B CHECKPOINTS PASSED`
+
+8. **Run the complete Part C pipeline**:
+   ```bash
+   python scripts/run_part_c.py
+   ```
+   *Executes input guardrails, PII redaction audit, zero-shot and few-shot triage classifications with exponential backoff retry recovery, output validation, token budget demo (`outputs/triage_budget_demo.csv`), customer segment-driven ticket routing (`outputs/triage_results.csv`), and automated validation.*
+
+9. **Execute Part C standalone validation**:
+   ```bash
+   python scripts/validate_part_c.py
+   ```
+   *Output ends with the exact string:* `ALL PART C CHECKPOINTS PASSED`
 
 ---
 
@@ -646,19 +675,239 @@ ALL PART B CHECKPOINTS PASSED
 
 ## 5. Part C: Support Ticket Triage with Guardrails
 
-> [!NOTE]
-> *Structured Placeholder for Part C.*
+### 5.1 Architecture & Pipeline Design
+Customer support operations at Swiggy Instamart receive unstructured tickets ranging from urgent fraud reports and delivery inquiries to corrupted blanks and abusive/bloated inputs. Sending unvalidated, unredacted raw customer messages directly to an external LLM risks severe privacy breaches (PII leakage), runaway API costs, unhandled service outages, and hallucinated classifications.
 
-### 5.1 Scope & Objectives
-Part C processes 164 customer support tickets from `data/raw/tickets.csv` through an offline classification pipeline backed by `mock_llm.py`:
-- **Input Guardrails**: Filter empty tickets (`skipped_empty`) and tickets exceeding 400 estimated tokens (`flagged_long`).
-- **PII Redaction**: Mask email addresses (`[EMAIL]`), phone numbers (`[PHONE]`), and order identifiers (`[ORDER_ID]`) before prompt assembly.
-- **Resilient LLM Invocation**: Handle transient errors (`TransientLLMError`) using exponential backoff with jitter.
-- **Output Validation**: Enforce strict category JSON parsing and fallback keyword extraction (`classified_json`, `classified_keyword`, `flagged_invalid_output`).
-- **Budgeting & Intelligent Routing**: Implement token expenditure budgeting and route tickets based on customer segment flags from Part B (`security_team`, `premium_desk`, `support_queue`, `human_review`).
-- **Artifacts to be Produced**:
-  - `outputs/triage_budget_demo.csv`
-  - `outputs/triage_results.csv`
+Part C implements an enterprise-grade, offline support ticket triage pipeline wrapped with rigorous safety, resilience, and business intelligence guardrails:
+
+```
+Raw Ticket (data/raw/tickets.csv)
+       │
+       ▼
+[Input Guardrails] ─── Empty / Whitespace? ──────► status="skipped_empty" (route: human_review, NORMAL)
+       │           └── > 400 est_tokens?   ──────► status="flagged_long"  (route: human_review, NORMAL)
+       ▼ (156 eligible tickets)
+[PII Redaction] (Email -> [EMAIL], Phone -> [PHONE], Order ID -> [ORDER_ID])
+       │
+       ▼
+[Token Budget Check] ── Total Tokens >= Budget? ──► status="budget_exhausted" (route: human_review, NORMAL)
+       │
+       ▼
+[Resilient Mock LLM Call] (Exponential Backoff + Jitter on TransientLLMError, Max 3 Retries)
+       │
+       ▼
+[Output Validation] ─── Valid JSON + Allowed Category? ──► status="classified_json"
+       │            ─── Non-JSON + 1 Allowed Keyword?  ──► status="classified_keyword"
+       │            ─── Invalid Category / Malformed?  ──► status="flagged_invalid_output" (human_review, NORMAL)
+       ▼
+[4-Tier Customer Segment Routing] (Reads outputs/customer_segments.csv from Part B)
+       ├── Fraud Category                 ──► route: security_team, priority: HIGH
+       ├── is_premium == True             ──► route: premium_desk,  priority: HIGH
+       └── Standard Classified Ticket     ──► route: support_queue, priority: NORMAL
+```
+
+---
+
+### 5.2 Input Guardrails (`src/part_c/guardrails.py`)
+Incoming tickets are evaluated against two pre-model boundary conditions before any prompt assembly or network/model interaction:
+1. **Empty / Whitespace Filter**: Tickets containing empty text or pure whitespace are immediately flagged as `skipped_empty` and never dispatched to the model.
+2. **Token Ceiling Guard**: Ticket token length is estimated using the capstone standard formula:
+   $$\text{est\_tokens}(text) = \lceil \text{word\_count} \times 1.3 \rceil$$
+   Any ticket exceeding `MAX_INPUT_TOKENS = 400` is flagged as `flagged_long` and intercepted before model invocation.
+
+#### Input Guardrail Audit Checkpoints
+| Metric | Count | Checkpoint Reference | Audit Finding |
+|---|---:|---:|---|
+| Total Raw Tickets | 164 | 164 | Complete raw ticket corpus ingested with `keep_default_na=False`. |
+| Empty / Whitespace Tickets (`skipped_empty`) | **4** | 4 | Tickets `T0157`, `T0158`, `T0159`, `T0160` intercepted without model call. |
+| Over-length Tickets (`flagged_long`) | **4** | 4 | Tickets `T0161`, `T0162`, `T0163`, `T0164` (~520 words each). |
+| Long Ticket Estimated Tokens | **734** | 734 | Each over-length ticket estimated at exactly 734 tokens (> 400 limit). |
+| Eligible Tickets Dispatched to Classifier | **156** | 156 | Exactly 156 tickets proceed to PII redaction and model triage. |
+
+---
+
+### 5.3 Personal Identifiable Information (PII) Redaction (`src/part_c/pii_redaction.py`)
+To prevent customer data exfiltration, sensitive personal identifiers are masked using regex substitution in strict sequential order prior to constructing prompts:
+1. **Email Pattern**: `r"[\w.+-]+@[\w-]+\.[\w.]+"` $\rightarrow$ `[EMAIL]`
+2. **Phone Pattern**: `r"\b[6-9]\d{9}\b"` $\rightarrow$ `[PHONE]`
+3. **Order ID Pattern**: `r"ORD-\d{6}"` $\rightarrow$ `[ORDER_ID]`
+
+#### PII Substitution Audit
+| Identifier Type | Regex Pattern | Replacement Token | Substitutions Count | Reference |
+|---|---|---|---:|---:|
+| Email Address | `[\w.+-]+@[\w-]+\.[\w.]+` | `[EMAIL]` | **55** | 55 |
+| Indian Phone Number | `\b[6-9]\d{9}\b` | `[PHONE]` | **91** | 91 |
+| Order Identifier | `ORD-\d{6}` | `[ORDER_ID]` | **132** | 132 |
+| **Total PII Masked** | — | — | **278** | **278** |
+| Residual PII After Masking | — | — | **0** | **0** |
+
+> [!IMPORTANT]
+> **Zero-Leakage Assertion**: Re-applying all three regular expressions across the entire redacted corpus yields **0 residual matches**. In accordance with capstone requirements, the user message sent to `mock_llm.chat()` is strictly the redacted ticket text and nothing else.
+
+---
+
+### 5.4 Prompt Engineering: Zero-Shot vs Few-Shot (`src/part_c/prompts.py`)
+Two system prompts were designed to evaluate classification capability, robustness, and token overhead:
+- **Zero-Shot Prompt**: Contains the mandatory keyword `CLASSIFY`, lists the four allowed categories (`billing`, `delivery`, `technical`, `fraud`), and mandates JSON output of the form `{"category": "...", "reason": "..."}` without containing the substring `EXAMPLES:`.
+- **Few-Shot Prompt**: Contains the mandatory keyword `CLASSIFY`, lists the four allowed categories, mandates identical JSON output, and includes a dedicated section header `EXAMPLES:` followed by four distinct labeled exemplars covering each category (including fraud).
+
+---
+
+### 5.5 Resilient Invocation & Exponential Backoff (`src/part_c/retry_handler.py`)
+The underlying chat completion service simulates transient failures (`mock_llm.TransientLLMError: 503 server busy`) on every 9th call (`_state["calls"] % 9 == 0`).
+
+To ensure zero dropped requests, all model interactions are wrapped in an autonomous retry handler:
+- **Maximum Retries**: 3 retries per ticket ($n \in \{0, 1, 2\}$).
+- **Exponential Backoff with Jitter**:
+  $$\text{wait}(n) = \text{BASE\_DELAY} \times 2^n \times \text{Uniform}(0.9, 1.15), \quad \text{where } \text{BASE\_DELAY} = 0.05\text{s}$$
+- **Jitter Range**: For retry attempt $n=0$, wait intervals lie strictly between **0.0450s and 0.0575s**.
+- **Audit Logging**: Each retry emits a standardized audit line:
+  `[RETRY] Ticket=<id> | retry=<n> | wait=<wait>s`
+
+#### Retry Resilience Checkpoints
+| Metric | Measured Value | Reference Checkpoint | Status |
+|---|---:|---:|:---:|
+| Full Run Eligible Tickets | 156 | 156 | Matched |
+| Simulated Transient Failures Encountered | **19** | 19 | Matched |
+| Failures Recovered on Retry 0 | **19** | 19 | Matched |
+| Minimum Retry Wait Recorded | **0.0459s** | $\ge 0.0450\text{s}$ | Within Bounds |
+| Maximum Retry Wait Recorded | **0.0570s** | $\le 0.0575\text{s}$ | Within Bounds |
+| Unrecovered / Permanent Errors | **0** | 0 | 100% Resilience |
+
+---
+
+### 5.6 Output Validation & Keyword Fallback (`src/part_c/output_validation.py`)
+Model responses are validated through a robust two-tiered parser that never guesses:
+1. **JSON Validation (`classified_json`)**: The response is parsed with `json.loads()`. If parsing succeeds and `category` is within the four allowed values (`billing`, `delivery`, `technical`, `fraud`), the ticket receives status `classified_json`. Valid JSON containing an unauthorized category (such as the planted `{"category": "shipping", "reason": "parcel movement"}`) is immediately rejected and marked `flagged_invalid_output`.
+2. **Word Extraction Fallback (`classified_keyword`)**: For non-JSON responses (such as the planted chatty response `The customer appears to have a <category>-related problem.`), tokens are extracted using `re.findall(r"[a-z]+", content.lower())`. This correctly splits hyphenated tokens like `billing-related` into `billing` and `related`. If exactly one allowed category word is present, it is accepted with status `classified_keyword`. If zero or multiple category words appear, it is assigned `flagged_invalid_output`.
+3. **Human Review Escaping (`flagged_invalid_output`)**: Malformed outputs and out-of-spec categories are never guessed; they are flagged for human inspection.
+
+#### Output Validation Status Breakdown (156 Eligible Tickets)
+| Validation Status | Count | Reference | Operational Interpretation |
+|---|---:|---:|---|
+| `classified_json` | **135** | 135 | Well-formed JSON containing an authorized category. |
+| `classified_keyword` | **12** | 12 | Non-JSON chatty replies safely rescued via regex word extraction. |
+| `flagged_invalid_output` | **9** | 9 | Out-of-vocabulary categories (`shipping`) routed to human agents. |
+| **Total Classified Tickets** | **147** | **147** | Successfully triaged tickets entering business queues ($135 + 12$). |
+
+---
+
+### 5.7 Zero-Shot vs Few-Shot Performance Comparison (`src/part_c/pipeline.py`)
+Both prompt architectures were evaluated over a complete run across all 156 eligible tickets with no artificial token budget constraint (`TOKEN_BUDGET = 100,000`):
+
+#### Quantitative Model Comparison
+| Metric | Zero-Shot Prompt | Few-Shot Prompt | Delta / Impact |
+|---|---:|---:|---|
+| Tickets Ingested | 164 | 164 | Identical corpus |
+| Guardrail Intercepts (`skipped_empty` + `flagged_long`) | 8 | 8 | Zero model cost |
+| Model Invocations | 156 | 156 | 19 retries each |
+| Output Rule Failures (`flagged_invalid_output`) | 9 | 9 | Deterministic misbehavior |
+| Total Successfully Classified | **147** | **147** | Identical classified set |
+| Correct Classifications vs `true_category` | 126 | **147** | +21 correct |
+| **Classification Accuracy** | **85.71%** (126 / 147) | **100.00%** (147 / 147) | **+14.29%** |
+| Total Token Consumption | **15,484** | **32,800** | +17,316 (+111.8%) |
+| Average Tokens per Classified Ticket | **105.33** | **223.13** | +117.80 tokens/ticket |
+
+#### Zero-Shot Confusion Matrix (147 Classified Tickets)
+```
+                  PREDICTED CATEGORY
+TRUE CATEGORY   billing   delivery   technical   fraud    Total
+billing            38         0          0         0       38
+delivery            0        36          0         0       36
+technical          10         0         29         0       39
+fraud              11         0          0        23       34
+Total              59        36         29        23      147
+```
+
+#### Detailed Zero-Shot Misclassifications
+- **Fraud $\rightarrow$ Billing (11 errors)**: Tickets containing unauthorized charges or card hack reports were misclassified as standard billing issues because the zero-shot prompt lacked disambiguation exemplars, defaulting to billing keyword priority (`charged`, `deducted`, `payment`).
+- **Technical $\rightarrow$ Billing (10 errors)**: Tickets reporting cart freeze or coupon application errors with pending order tags were erroneously classified as billing disputes.
+- **Few-Shot Resolution**: Incorporating explicit `EXAMPLES:` with dedicated fraud and technical exemplars inverted the evaluation priority, eliminating all 21 misclassifications and achieving **100% classification accuracy**.
+
+#### When Are the Extra Few-Shot Tokens Worth Paying For?
+The few-shot prompt consumes an additional 117.80 tokens per classified ticket (223.13 vs 105.33 tokens), representing an approximate 2.12x cost increase. In a commercial quick-commerce environment handling thousands of daily tickets, this extra cost is overwhelmingly justified. Under zero-shot classification, 32.4% of actual fraud tickets (11 of 34) are misrouted to the regular billing support queue, delaying account security intervention and directly risking chargebacks, regulatory penalties, and customer churn. Investing approximately 118 extra tokens per ticket eliminates 100% of these high-risk routing errors, dramatically reducing human remediation overhead and financial liability.
+
+---
+
+### 5.8 Token Budget Experiment (`outputs/triage_budget_demo.csv`)
+To protect against runaway API consumption, a hard cumulative token ceiling was evaluated:
+- **Enforcement Rule**: Before each model invocation, if the running cumulative token total ($\sum \text{usage.total\_tokens}$) is $\ge \text{TOKEN\_BUDGET}$, the call is suppressed and the ticket receives status `budget_exhausted`.
+- **Experimental Parameters**: Executed on the zero-shot pipeline with `TOKEN_BUDGET = 6,000`.
+- **Output Artifact**: Persisted to `outputs/triage_budget_demo.csv`.
+
+#### Budget Demo Results
+| Status Category | Ticket Count | Action Taken |
+|---|---:|---|
+| `budget_exhausted` | **95** | Intercepted once cumulative tokens reached $\ge 6,000$; routed to `human_review`. |
+| `classified_json` | 54 | Successfully processed within budget ceiling. |
+| `classified_keyword` | 4 | Rescued keyword tickets processed within budget. |
+| `flagged_invalid_output` | 3 | Invalid outputs occurring before budget exhaustion. |
+| `skipped_empty` | 4 | Filtered pre-model by input guardrails (0 tokens). |
+| `flagged_long` | 4 | Filtered pre-model by input guardrails (0 tokens). |
+| **Total Processed** | **164** | **100% accounting of all customer tickets.** |
+
+---
+
+### 5.9 Customer Segment-Driven Routing & Final Production Results (`outputs/triage_results.csv`)
+The production triage pipeline executes the **few-shot prompt** under an enterprise ceiling (`TOKEN_BUDGET = 100,000`), integrating customer segment intelligence from Part B (`outputs/customer_segments.csv`):
+
+#### 4-Tier Routing Logic
+```
+Rule 1: If status in ['skipped_empty', 'flagged_long', 'flagged_invalid_output', 'budget_exhausted']
+        ──► route = "human_review", priority = "NORMAL"
+Rule 2: Else if category == "fraud"
+        ──► route = "security_team", priority = "HIGH"
+Rule 3: Else if customer is_premium == True (from Part B segments)
+        ──► route = "premium_desk", priority = "HIGH"
+Rule 4: Else
+        ──► route = "support_queue", priority = "NORMAL"
+```
+
+#### Final Production Triage Routing Distribution (`outputs/triage_results.csv`)
+| Routing Destination | Priority | Ticket Count | Percentage | Operational Purpose |
+|---|:---:|---:|---:|---|
+| `support_queue` | `NORMAL` | **102** | 62.20% | Standard automated routing for routine delivery, billing, and technical tickets from standard customers. |
+| `security_team` | `HIGH` | **34** | 20.73% | High-priority escalation for all detected fraud and unauthorized transaction tickets. |
+| `human_review` | `NORMAL` | **17** | 10.37% | Manual review for guardrail violations (4 empty, 4 long) and model validation failures (9 invalid output). |
+| `premium_desk` | `HIGH` | **11** | 6.71% | White-glove concierge support queue for high-value Premium tier customers (`is_premium == True`). |
+| **Total Ingested** | — | **164** | **100.0%** | Complete corpus routed deterministically. |
+
+#### Priority Breakdown
+- **`NORMAL` Priority**: 119 tickets (102 standard support queue + 17 human review).
+- **`HIGH` Priority**: 45 tickets (34 fraud security team + 11 premium customer desk).
+
+#### Output File Schema
+`outputs/triage_results.csv` contains exactly 164 rows and 8 standardized columns:
+- `ticket_id`: Primary ticket identifier (`T0001` .. `T0164`).
+- `customer_id`: Instamart customer reference (`C0001` .. `C1200`).
+- `status`: Final triage disposition (`classified_json`, `classified_keyword`, `skipped_empty`, `flagged_long`, `flagged_invalid_output`).
+- `category`: Extracted category (`billing`, `delivery`, `technical`, `fraud`), left blank for unclassified tickets.
+- `segment_name`: Segment description mapped from Part B (`Premium Loyalists`, `Frequent Regulars`, etc.).
+- `priority`: Escalation level (`HIGH` or `NORMAL`).
+- `route`: Operational dispatch destination (`support_queue`, `security_team`, `premium_desk`, `human_review`).
+- `tokens_used`: Actual tokens consumed for the ticket interaction.
+
+---
+
+### 5.10 Part C Automated Validation Suite
+Executing `python scripts/validate_part_c.py` verifies all eight Part C architectural requirements and numerical checkpoints:
+
+```
+============================================================
+RUNNING PART C VERIFICATION SUITE
+============================================================
+[CHECK 1] Guardrails verified: 4 empty tickets, 4 long tickets (each 734 tokens).
+[CHECK 2] PII redaction verified: 55 emails, 91 phones, 132 orders (278 total, 0 remaining).
+[CHECK 3] System prompts verified: Zero-shot & Few-shot contract compliant.
+[CHECK 4] Retry resiliency verified: exactly 19 TransientLLMErrors recovered on retry 0 within [0.045, 0.0575]s.
+[CHECK 5] Output validation counts verified: 135 JSON, 12 keyword, 9 invalid output (147 classified).
+[CHECK 6] Classification accuracies verified: Zero-shot 85.7% (126/147, 11 fraud & 10 tech -> billing), Few-shot 100.0% (147/147).
+[CHECK 7] Token budget demo verified: 95 tickets ended budget_exhausted under 6000 token ceiling.
+[CHECK 8] Routing & priorities verified: human_review (NORMAL), security_team (HIGH), premium_desk (HIGH), support_queue (NORMAL).
+============================================================
+ALL PART C CHECKPOINTS PASSED
+============================================================
+```
 
 ---
 
@@ -686,8 +935,10 @@ Part D delivers an automated support assistant and autonomous refund resolution 
 2. **Fixed Category Imputation**: Imputation of missing delivery times for completed orders relies on static category medians rather than multi-variate modeling (e.g., city, weather conditions, hour of day).
 3. **Single Analytical Window**: Transaction history spans exactly 183 days (April 1 to September 30, 2025). Seasonality across festival periods (Diwali, New Year) is not captured.
 4. **Post-Hoc Whole-Window Premium Labeling**: The Premium flag originates from the whole-window RFM analysis (spanning through September 30), which overlaps with the September lapse outcome window; therefore, the prioritized retention list is illustrative and not a leakage-free evaluation.
+5. **PII Masking Scope**: Current regex masking targets standard email structures, 10-digit Indian mobile numbers, and Swiggy order patterns. Unstructured personal identifiers (such as street addresses, customer names, or UPI IDs) require named entity recognition (NER) models for complete redaction in open production environments.
+6. **Token Budgeting Dynamics**: The token budget manager operates at batch-level cut-offs; production implementations would benefit from customer-level rate-limiting and dynamic prompt token compression.
 
 ### 7.2 Next Steps for Integration
-1. **Support Ticket Triage Routing (Part C)**: Feed `outputs/customer_segments.csv` into Part C to route inbound support tickets from Premium customers directly to the `premium_desk` queue with high priority.
-2. **Database Integration for Agents (Part D)**: Part D's autonomous refund agent will connect directly to `data/instamart.db` to retrieve order records and verify delivery latency against refund policies.
+1. **Database Integration for Agents (Part D)**: Part D's autonomous refund agent will connect directly to `data/instamart.db` to retrieve order records and verify delivery latency against refund policies.
+2. **Policy Document Chunking & TF-IDF Retrieval (Part D)**: Chunk the five policy documents in `data/policies/` into 40-word segments (10-word overlap) and integrate TF-IDF cosine similarity search.
 3. **End-to-End Orchestration**: Develop an overall repository runner linking data foundation, customer intelligence, ticket triage, and autonomous policy agents into a single operational interface.
