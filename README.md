@@ -1,6 +1,6 @@
 # Instamart Customer Intelligence & Support Copilot
 
-An enterprise-grade, reproducible data engineering and intelligence pipeline designed for quick-commerce operations across six metro cities in India. This repository delivers **Part A: Data Foundation — Clean, Store, Query** of the capstone project, turning raw, noisy transaction exports into a trusted, relational analytical database and answering core business intelligence questions through SQL and pandas.
+A reproducible, end-to-end data engineering and customer intelligence pipeline designed for quick-commerce operations across six metro cities in India. This repository delivers **all four parts (A–D)** of the Instamart Customer Intelligence & Support Copilot capstone project: data cleaning and analytics, customer segmentation and lapse prediction, guarded support ticket triage, and policy-grounded RAG with a resumable refund agent. It transforms synthetic operational data into analytical outputs, predictive models, auditable support workflows, and policy-governed refund decisions.
 
 ---
 
@@ -126,7 +126,7 @@ instamart-copilot/
 
 ## 2. Reproduce
 
-To reproduce the entire data foundation, relational database, analytical queries, and checkpoint verification from a clean repository clone, execute the following numbered commands in order:
+To reproduce the complete four-part project, including synthetic data generation, data cleaning, SQL analytics, customer segmentation, lapse prediction, support ticket triage, policy RAG, refund-agent scenarios, and checkpoint verification, clone the repository and execute the following commands in order:
 
 1. **Create and activate an isolated virtual environment**:
    ```bash
@@ -1112,9 +1112,9 @@ To prevent unauthorized payouts and duplicate disbursements, financial safety is
 #### Seven Agent Scenario Execution Results
 | Scenario | Inbound Message / Order ID | Status | Refund Amount (INR) | Model Calls | Tokens Used | Tools Executed Sequence |
 |---|---|---|---:|---:|---:|---|
-| **S1** | `ORD-100048` (Late, small order) | `REFUND` | **INR 128.25** | **5** | 1,147 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund` |
-| **S2** | `ORD-100067` (Late, small order) | `REFUND` | **INR 135.00** | **5** | 1,147 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund` |
-| **S3** | `ORD-100145` (Late, high-value order) | `ESCALATE` | **INR 1,999.00** | **5** | 1,134 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `escalate_to_human` |
+| **S1** | `ORD-100048` (Late, small order) | `REFUND` | **INR 128.25** | **5** | 1,152 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund` |
+| **S2** | `ORD-100067` (Late, small order) | `REFUND` | **INR 135.00** | **5** | 1,152 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `issue_refund` |
+| **S3** | `ORD-100145` (Late, high-value order) | `ESCALATE` | **INR 1,999.00** | **5** | 1,139 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` $\rightarrow$ `escalate_to_human` |
 | **S4** | `ORD-100001` (On-time, delivered 18m) | `DENIED` | **INR 0.00** | **4** | 805 | `get_order` $\rightarrow$ `search_policy` $\rightarrow$ `calculate_refund` |
 | **S5** | `ORD-100025` (Cancelled order) | `DENIED` | **INR 0.00** | **3** | 487 | `get_order` $\rightarrow$ `search_policy` |
 | **S6** | `ORD-999999` (Non-existent order) | `NOT_FOUND` | **INR 0.00** | **2** | 172 | `get_order` |
