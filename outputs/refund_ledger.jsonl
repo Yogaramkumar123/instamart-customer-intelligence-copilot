@@ -1,4 +1,4 @@
-{"timestamp": "2026-11-06T20:49:36.572359+00:00", "tool": "issue_refund", "action": "refund_issued", "order_id": "ORD-100048", "refund_inr": 128.25}
-{"timestamp": "2026-11-06T20:49:36.596373+00:00", "tool": "issue_refund", "action": "refund_issued", "order_id": "ORD-100067", "refund_inr": 135.0}
-{"timestamp": "2026-11-06T20:49:36.612360+00:00", "tool": "escalate_to_human", "action": "escalate_to_human", "order_id": "ORD-100145", "refund_inr": 1999.0}
-{"timestamp": "2026-11-06T20:49:36.692370+00:00", "tool": "issue_refund", "action": "refund_issued", "order_id": "ORD-100048", "refund_inr": 128.25}
+{"timestamp": "2026-11-07T14:46:27.303985+00:00", "tool": "issue_refund", "action": "refund_issued", "order_id": "ORD-100048", "refund_inr": 128.25, "idempotency_key": "run_S1_5049e666:ORD-100048"}
+{"timestamp": "2026-11-07T14:46:27.345981+00:00", "tool": "issue_refund", "action": "refund_issued", "order_id": "ORD-100067", "refund_inr": 135.0, "idempotency_key": "run_S2_428f65ba:ORD-100067"}
+{"timestamp": "2026-11-07T14:46:27.367549+00:00", "tool": "escalate_to_human", "action": "escalate_to_human", "order_id": "ORD-100145", "refund_inr": 1999.0, "idempotency_key": "run_S3_a0cdb383:ORD-100145"}
+{"timestamp": "2026-11-07T14:46:27.510123+00:00", "tool": "issue_refund", "action": "refund_issued", "order_id": "ORD-100048", "refund_inr": 128.25, "idempotency_key": "crash_recovery_demo_s1:ORD-100048"}

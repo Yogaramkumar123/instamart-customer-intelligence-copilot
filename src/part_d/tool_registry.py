@@ -57,7 +57,7 @@ TOOLS_SPEC: List[Dict[str, Any]] = [
     },
     {
         "name": "issue_refund",
-        "description": "Issue an approved refund up to INR 1000 and record it in the ledger.",
+        "description": "Issue an approved refund up to INR 1000 and record it in the ledger with idempotency protection.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -67,7 +67,11 @@ TOOLS_SPEC: List[Dict[str, Any]] = [
                 },
                 "refund_inr": {
                     "type": "number",
-                    "description": "Refund amount in INR to be issued.",
+                    "description": "Refund amount in INR to be issued (must be between 0 and 1000).",
+                },
+                "idempotency_key": {
+                    "type": "string",
+                    "description": "Optional unique idempotency transaction key to prevent duplicate payouts.",
                 },
             },
             "required": ["order_id", "refund_inr"],
@@ -86,6 +90,10 @@ TOOLS_SPEC: List[Dict[str, Any]] = [
                 "refund_inr": {
                     "type": "number",
                     "description": "Refund amount in INR requiring human approval.",
+                },
+                "idempotency_key": {
+                    "type": "string",
+                    "description": "Optional unique idempotency transaction key for auditing.",
                 },
             },
             "required": ["order_id", "refund_inr"],

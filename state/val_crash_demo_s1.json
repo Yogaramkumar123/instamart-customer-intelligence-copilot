@@ -86,7 +86,7 @@
       "role": "tool",
       "tool_call_id": "call_4",
       "name": "issue_refund",
-      "content": "{\"refund_inr\": 128.25}"
+      "content": "{\"refund_inr\": 128.25, \"status\": \"issued\", \"idempotency_key\": \"val_crash_demo_s1:ORD-100048\"}"
     }
   ],
   "tokens_used": 821,
@@ -157,9 +157,11 @@
         "refund_inr": 128.25
       },
       "observation": {
-        "refund_inr": 128.25
+        "refund_inr": 128.25,
+        "status": "issued",
+        "idempotency_key": "val_crash_demo_s1:ORD-100048"
       }
     }
   ],
-  "timestamp": "2026-11-06T20:49:42.871815+00:00"
+  "timestamp": "2026-11-07T14:47:07.739783+00:00"
 }

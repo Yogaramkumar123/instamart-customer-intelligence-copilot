@@ -127,7 +127,9 @@ def run_agent(
             refund_amt = 0.0
             for s in steps:
                 if s["tool"] in ("issue_refund", "escalate_to_human"):
-                    refund_amt = float(s["arguments"].get("refund_inr", 0.0))
+                    obs = s.get("observation", {})
+                    if "error" not in obs:
+                        refund_amt = float(s["arguments"].get("refund_inr", 0.0))
 
             return {
                 "run_id": run_id,
@@ -150,16 +152,19 @@ def run_agent(
 
         for tc in msg.tool_calls:
             tool_name = tc.name
-            args = tc.arguments or {}
+            args = dict(tc.arguments or {})
 
             # Execute tool through TOOL_MAP
             if tool_name not in TOOL_MAP:
                 obs_data = {"error": f"Tool '{tool_name}' not recognized."}
             else:
                 tool_fn = TOOL_MAP[tool_name]
-                # Provide ledger path to issue/escalate tools if applicable
+                # Provide ledger path and stable transaction idempotency key to issue/escalate tools
                 if tool_name in ("issue_refund", "escalate_to_human"):
-                    obs_data = tool_fn(ledger_path=ledger_path, **args)
+                    call_kwargs = dict(args)
+                    if "idempotency_key" not in call_kwargs or not call_kwargs["idempotency_key"]:
+                        call_kwargs["idempotency_key"] = f"{run_id}:{call_kwargs.get('order_id', 'unknown')}"
+                    obs_data = tool_fn(ledger_path=ledger_path, **call_kwargs)
                 else:
                     obs_data = tool_fn(**args)
 

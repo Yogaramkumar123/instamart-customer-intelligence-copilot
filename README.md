@@ -1076,8 +1076,8 @@ Five tools were implemented to empower the autonomous refund agent:
 | `get_order` | Query analytical SQLite DB (`data/instamart.db`) for order status, amount, and delivery minutes. | `order_id` (string) | `{"order_id", "status", "order_amount", "delivery_minutes"}` or `{"error": "order not found"}` |
 | `search_policy` | Retrieve grounded policy clauses via TF-IDF cosine similarity. | `query` (string) | `{"results": [...]}` |
 | `calculate_refund` | Compute policy-governed refund in INR based on order amount and delivery duration. | `order_amount` (number), `delivery_minutes` (integer) | `{"refund_inr": <amount>}` |
-| `issue_refund` | Execute and log approved refund ($\le \text{INR } 1000$) to `outputs/refund_ledger.jsonl`. | `order_id` (string), `refund_inr` (number) | `{"refund_inr": <amount>}` |
-| `escalate_to_human` | Escalate high-value refund ($> \text{INR } 1000$) to human lead and record in ledger. | `order_id` (string), `refund_inr` (number) | `{"refund_inr": <amount>}` |
+| `issue_refund` | Record and disburse approved refund ($\le \text{INR } 1000$) with transaction-level idempotency to `outputs/refund_ledger.jsonl`. | `order_id` (string), `refund_inr` (number), `idempotency_key` (string, optional) | `{"refund_inr": <amount>, "status": "issued", "idempotency_key": ...}` or `{"error": ...}` |
+| `escalate_to_human` | Escalate high-value refund ($> \text{INR } 1000$) to human lead and record in ledger. | `order_id` (string), `refund_inr` (number), `idempotency_key` (string, optional) | `{"refund_inr": <amount>, "status": "escalated", "idempotency_key": ...}` or `{"error": ...}` |
 
 #### Refund Decision Business Rules
 1. **Completion Prerequisite**: Only orders with `status == "completed"` are eligible for refunds. Cancelled orders were never billed ($\text{refund} = \text{INR } 0.00$).
@@ -1087,7 +1087,26 @@ Five tools were implemented to empower the autonomous refund agent:
 
 ---
 
-### 6.7 ReAct Agent Loop & Scenario Execution (`src/part_d/agent.py`)
+### 6.7 Financial Safety & Transaction-Level Idempotency (`src/part_d/tools.py`)
+To prevent unauthorized payouts and duplicate disbursements, financial safety is enforced at the tool boundary:
+1. **Tool-Enforced INR 1,000 Refund Ceiling**:
+   - `issue_refund()` validates amounts directly: values between INR 0.00 and INR 1,000.00 are accepted.
+   - Any requested amount strictly exceeding INR 1,000.00 (e.g., INR 1,000.01 or INR 1,999.00) is rejected immediately with an explicit error response (`"error": "Refund amount INR ... exceeds maximum auto-approval limit of INR 1000.00."`).
+   - Rejected refunds are **never** appended to `outputs/refund_ledger.jsonl`.
+   - Invalid, negative, NaN, and infinite values are strictly rejected without ledger mutation.
+   - `escalate_to_human()` validates escalation amounts and explicitly supports high-value claims ($> \text{INR } 1,000$).
+2. **Transaction-Level Idempotency Protection**:
+   - Every refund execution establishes a stable transaction key (`idempotency_key`). In ReAct agent execution, this key defaults to `f"{run_id}:{order_id}"`, tying the transaction to the specific agent execution.
+   - Repeated requests bearing the same idempotency key are rejected with `status = "duplicate"` and do not append a duplicate payout record to the ledger.
+   - Separate legitimate transactions can reuse an order ID across distinct runs or simulations without being blocked globally, because deduplication is transaction-keyed rather than order-keyed.
+   - The ledger explicitly records `idempotency_key` for auditability.
+3. **Architecture Boundaries: Implemented Guarantees vs. Production Limitations**:
+   - **Implemented & Verified**: In-process thread-safe locking (`_LEDGER_LOCK`), key-based duplicate verification against the local ledger file, duplicate rejection, and tool-level amount validation.
+   - **Production Limitations (Not Implemented)**: The local JSONL ledger does **not** provide ACID transactional guarantees (no multi-phase commits, write-ahead logs, or atomic rollbacks). File-locking is process-local and single-node; enterprise deployments require an ACID-compliant transactional SQL database (e.g. PostgreSQL) with unique database constraints on idempotency keys and row-level locking (`SELECT ... FOR UPDATE`).
+
+---
+
+### 6.8 ReAct Agent Loop & Scenario Execution (`src/part_d/agent.py`)
 `run_agent(user_message, scenario_id, max_iterations=6, token_limit=6000, time_limit_seconds=10)` executes an autonomous reasoning and action loop. All 7 rows from `data/raw/agent_scenarios.csv` were executed, logging audit trails to `outputs/agent_runs.jsonl`:
 
 #### Seven Agent Scenario Execution Results
@@ -1106,7 +1125,7 @@ Five tools were implemented to empower the autonomous refund agent:
 
 ---
 
-### 6.8 Safety Limits & Graceful Fallback Demonstrations
+### 6.9 Safety Limits & Graceful Fallback Demonstrations
 Three independent safety boundaries protect system resources:
 1. **Iteration Limit**: After 6 calls without terminal resolution, S7 terminates with `FALLBACK_MAX_ITERATIONS`.
 2. **Token Ceiling Guard**: Evaluated after every model call. When `tokens_used > token_limit`, the agent halts immediately without executing the requested tool.
@@ -1116,7 +1135,7 @@ Three independent safety boundaries protect system resources:
 
 ---
 
-### 6.9 Resumable Execution & Crash Recovery Demonstration (`src/part_d/checkpoint.py`, `src/part_d/resume.py`)
+### 6.10 Resumable Execution & Crash Recovery Demonstration (`src/part_d/checkpoint.py`, `src/part_d/resume.py`)
 After each tool observation is appended, a state snapshot is saved to `state/<run_id>.json` recording `run_id`, `scenario_id`, `messages`, `tokens_used`, `llm_calls`, `step_count`, and `tools_executed`.
 
 #### Required Crash Demonstration on Scenario S1
@@ -1146,7 +1165,7 @@ After each tool observation is appended, a state snapshot is saved to `state/<ru
 
 ---
 
-### 6.10 ReAct versus Plan-and-Execute Architecture Comparison
+### 6.11 ReAct versus Plan-and-Execute Architecture Comparison
 
 > In this quick-commerce refund workflow, the **ReAct (Reasoning + Acting)** architecture is fundamentally superior to a **Plan-and-Execute** design.
 >
@@ -1158,7 +1177,7 @@ After each tool observation is appended, a state snapshot is saved to `state/<ru
 
 ---
 
-### 6.11 Part D Automated Validation Status
+### 6.12 Part D Automated Validation Status
 Executing `python scripts/validate_part_d.py` validates all Part D functional requirements:
 
 ```text
@@ -1170,6 +1189,7 @@ RUNNING PART D COMPREHENSIVE VALIDATION SUITE
   [PASS] Tasks 3 & 4: Grounding evaluation passed with 12/12 doc retrieved, 12/12 fact grounded, 2/2 unanswerable fallback.
   [PASS] Task 4 Zero-Overlap: Successfully reproduced failure in zero-overlap experiment (2 questions failed due to chunk boundary splitting).
   [PASS] Task 5: Tool specs, dispatch map, DB lookups, and refund calculation rules verified.
+  [PASS] Financial Safety & Idempotency: All 10 direct safety tests verified (INR 1000 cap, rejected amounts, NaN/Inf, duplicate keys, separate transactions, crash idempotency).
   [PASS] Task 6: All seven scenarios matched expected outcomes, S1 took 5 calls, S7 reached FALLBACK_MAX_ITERATIONS.
   [PASS] Task 7: Token limit demo (FALLBACK_TOKEN_LIMIT) and Timeout demo (FALLBACK_TIMEOUT) verified.
   [PASS] Task 8: Crash and resume demonstration verified (exact 4 tool sequence: get_order, search_policy, calculate_refund, issue_refund; status REFUND INR 128.25).
@@ -1191,6 +1211,8 @@ ALL PART D CHECKPOINTS PASSED
 5. **PII Masking Scope**: Current regex masking targets standard email structures, 10-digit Indian mobile numbers, and Swiggy order patterns. Unstructured personal identifiers (such as street addresses, customer names, or UPI IDs) require named entity recognition (NER) models for complete redaction in open production environments.
 6. **Token Budgeting Dynamics**: The token budget manager operates at batch-level cut-offs; production implementations would benefit from customer-level rate-limiting and dynamic prompt token compression.
 7. **TF-IDF Lexical Limitations**: The policy retrieval engine is based on term-frequency inverted indexes. While effective for exact keyword matches, it cannot capture deep semantic paraphrasing; integrating dense embedding vector search (e.g. bi-encoders) would improve domain generalization.
+
+8. **Local JSONL Ledger & Concurrency Boundary**: The refund ledger is an append-only JSON Lines file protected by in-memory thread locking (`_LEDGER_LOCK`). It does not provide ACID transactional guarantees (no write-ahead logs, two-phase commit, or multi-node atomic rollbacks). Production deployments require an ACID-compliant SQL database (e.g., PostgreSQL) with unique constraints on transaction keys, distributed locks, and atomic `SELECT ... FOR UPDATE` isolation.
 
 ### 7.2 Next Steps for Production Deployment
 1. **Hybrid Dense-Sparse Retrieval**: Combine TF-IDF sparse matching with neural dense embeddings (BM25 + ColBERT/dense vector search) and cross-encoder re-ranking for enterprise policy retrieval.
